@@ -1,0 +1,5 @@
+mxnet
+venv
+macports_user_dir
+__*
+.DS_Store
