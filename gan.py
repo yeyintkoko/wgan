@@ -35,7 +35,9 @@ X, y = create_dataset(data, time_step)
 X = X.reshape(X.shape[0], X.shape[1], X.shape[2])  # Shape: (samples, time_step, features)
 
 model = Sequential()
-model.add(LSTM(50, return_sequences=True, input_shape=(time_step, X.shape[2])))  # Use number of features
+# shape=(time_step, features)
+model.add(Input(shape=(time_step, data.shape[1])))  # Define the input shape using Input layer
+model.add(LSTM(50, return_sequences=True))
 model.add(LSTM(50))
 model.add(Dense(1))  # Output layer for price prediction
 
