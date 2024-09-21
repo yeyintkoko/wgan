@@ -373,7 +373,7 @@ n_output = VAE_data.shape[1] - 1
 
 vae = VAE(n_hidden=n_hidden, n_latent=n_latent, n_layers=n_layers, n_output=n_output)
 # Create trainer with lower training rate
-optimizer = tf.keras.optimizers.Adam(learning_rate=0.001, clipnorm=1.0)
+optimizer = tf.keras.optimizers.Adam(learning_rate=0.01)
 vae.compile(optimizer=optimizer, loss='mean_squared_error')
 
 # Train the model
@@ -382,80 +382,72 @@ vae.compile(optimizer=optimizer, loss='mean_squared_error')
 # To evaluate the model
 # predictions = vae.predict(test_data)
 
-n_epoch = 150
-print_period = n_epoch // 10
-start = time.time()
+def train_vae():
+    n_epoch = 150
+    print_period = n_epoch // 10
+    start = time.time()
 
-training_loss = []
-validation_loss = []
+    training_loss = []
+    validation_loss = []
 
-epoch_loop_count = 0
-for epoch in range(n_epoch):
-    epoch_loss = 0
-    epoch_val_loss = 0
-    epoch_loop_count += 1
+    epoch_loop_count = 0
+    for epoch in range(n_epoch):
+        epoch_loss = 0
+        epoch_val_loss = 0
+        epoch_loop_count += 1
 
-    n_batch_train = 0
-    for batch in train_dataset:
-        n_batch_train += 1
-        data, labels = batch  # Unpack the data and labels
+        n_batch_train = 0
+        for batch in train_dataset:
+            n_batch_train += 1
+            data, labels = batch  # Unpack the data and labels
 
-        with tf.GradientTape() as tape:
+            with tf.GradientTape() as tape:
+                loss = vae(data)  # Forward pass
+
+            gradients = tape.gradient(loss, vae.trainable_variables)
+            optimizer.apply_gradients(zip(gradients, vae.trainable_variables))  # Update weights
+
+            epoch_loss += tf.reduce_mean(loss)
+
+        n_batch_val = 0
+        for batch in test_dataset:
+            n_batch_val += 1
+            data, labels = batch  # Unpack the data and labels
             loss = vae(data)  # Forward pass
+            epoch_val_loss += tf.reduce_mean(loss)
 
-        gradients = tape.gradient(loss, vae.trainable_variables)
-        optimizer.apply_gradients(zip(gradients, vae.trainable_variables))  # Update weights
+        epoch_loss /= n_batch_train
+        epoch_val_loss /= n_batch_val
 
-        epoch_loss += tf.reduce_mean(loss)
+        training_loss.append(epoch_loss.numpy())
+        validation_loss.append(epoch_val_loss.numpy())
 
-    n_batch_val = 0
-    for batch in test_dataset:
-        n_batch_val += 1
-        data, labels = batch  # Unpack the data and labels
-        loss = vae(data)  # Forward pass
-        epoch_val_loss += tf.reduce_mean(loss)
+        print('Epoch {}, Training loss {}, Validation loss {}\nTrained count {}, Tested count {}'.format(epoch, epoch_loss.numpy(), epoch_val_loss.numpy(), n_batch_train, n_batch_val))
+            
 
-    epoch_loss /= n_batch_train
-    epoch_val_loss /= n_batch_val
+    end = time.time()
+    print('Training completed in {} seconds.'.format(int(end - start)))
 
-    training_loss.append(epoch_loss.numpy())
-    validation_loss.append(epoch_val_loss.numpy())
-
-    print('Epoch {}, Training loss {}, Validation loss {}\nTrained count {}, Tested count {}'.format(epoch, epoch_loss.numpy(), epoch_val_loss.numpy(), n_batch_train, n_batch_val))
-        
-
-end = time.time()
-print('Training completed in {} seconds.'.format(int(end - start)))
+train_vae()
 
 vae.summary()
 
 print(vae)
 
-# # Print encoder layers
-# print("Encoder layers:")
-# for layer in vae.encoder.layers:
-#     print(f"Layer Name: {layer.name}")
-#     print(f"Layer Type: {layer.__class__.__name__}")
-#     print(f"Output Shape: {layer.output}")
-#     print(f"Number of Parameters: {layer.count_params()}")
-#     print("Weights and Biases:")
-#     print(layer.get_weights())  # This will show the weights and biases for the layer
-#     print("-" * 40)
+# predictions = vae.predict(test_data)
+# Plot the results
+# plt.figure(figsize=(12, 6))
+# plt.plot(test_data)
+# plt.plot(predictions, linestyle='--')
+# plt.title('Actual vs Predicted Values')
+# plt.xlabel('Days')
+# plt.ylabel('Apple Stock Price')
+# plt.legend()
+# plt.show()
 
-# # Print decoder layers
-# print("Decoder layers:")
-# for layer in vae.decoder.layers:
-#     print(f"Layer Name: {layer.name}")
-#     print(f"Layer Type: {layer.__class__.__name__}")
-#     print(f"Output Shape: {layer.output}")
-#     print(f"Number of Parameters: {layer.count_params()}")
-#     print("Weights and Biases:")
-#     print(layer.get_weights())  # This will show the weights and biases for the layer
-#     print("-" * 40)
-
-# dataset_total_df['Date'] = dataset_ex_df['Date']
-# vae_added_df = mx.nd.array(dataset_total_df.iloc[:, :-1].values)
-# print('The shape of the newly created (from the autoencoder) features is {}.'.format(vae_added_df.shape))
+dataset_TI_df['Date'] = dataset_ex_df['Date']
+vae_added_df = np.array(dataset_TI_df.iloc[:, :-1].values)
+print('The shape of the newly created (from the autoencoder) features is {}.'.format(vae_added_df.shape))
 
 # Plot the results
 # plt.figure(figsize=(14, 5))
