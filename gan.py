@@ -1,6 +1,7 @@
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
+from keras import layers
 from keras.models import Sequential
 from keras.layers import LSTM, Dense, Reshape, Conv1D, Flatten, Dropout
 from keras.optimizers import Adam
@@ -47,12 +48,18 @@ generator = build_generator()
 # Define the CNN Discriminator
 def build_discriminator():
     model = Sequential()
-    model.add(Conv1D(64, kernel_size=3, strides=2, padding='same', input_shape=(time_step - 1, 1)))
-    model.add(Dropout(0.3))
-    model.add(Conv1D(128, kernel_size=3, strides=2, padding='same'))
-    model.add(Dropout(0.3))
-    model.add(Flatten())
-    model.add(Dense(1, activation='sigmoid'))  # Binary classification
+    model.add(layers.Conv1D(32, kernel_size=5, strides=2, padding='same', activation='leaky_relu'))
+    model.add(layers.Conv1D(64, kernel_size=5, strides=2, padding='same', activation='leaky_relu'))
+    model.add(layers.BatchNormalization())
+    model.add(layers.Conv1D(128, kernel_size=5, strides=2, padding='same', activation='leaky_relu'))
+    model.add(layers.BatchNormalization())
+    # Add the two Fully Connected layers
+    model.add(layers.Flatten())  # Flatten the output before feeding into Dense layers
+    model.add(layers.Dense(220, use_bias=False))
+    model.add(layers.BatchNormalization())
+    model.add(layers.LeakyReLU(0.01))
+    model.add(layers.Dense(220, use_bias=False, activation='relu'))
+    model.add(layers.Dense(1))
     return model
 
 discriminator = build_discriminator()
@@ -93,7 +100,7 @@ def train_gan(epochs, batch_size):
             print(f"{epoch} [D loss: {d_loss[0]:.4f}] [G loss: {g_loss[0]:.4f}]")
 
 # Train the GAN
-train_gan(epochs=250, batch_size=32)  # Increased epochs for better learning
+train_gan(epochs=100, batch_size=64)  # Increased epochs for better learning
 
 # Generate New Price Series with context
 def generate_new_series_with_context(last_data, num_samples):
