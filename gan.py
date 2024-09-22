@@ -1,7 +1,6 @@
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
-from keras import layers
 from keras.models import Sequential
 from keras.layers import LSTM, Dense, Reshape, Conv1D, Flatten, Dropout
 from keras.optimizers import Adam
@@ -17,14 +16,10 @@ train_data, test_data = dataset[:num_training_days], dataset[num_training_days:]
 data = train_data.dropna().values  # Use all columns in the dataset
 
 # Normalize the data
-# data = (data - np.mean(data, axis=0)) / np.std(data, axis=0)
-# Add a check for NaN values
-if np.isnan(data).any():
-    print("Data contains NaNs after normalization!")
-
+data = (data - np.mean(data, axis=0)) / np.std(data, axis=0)
 
 # Define sequence length and number of features
-time_step = 60
+time_step = 50
 num_features = data.shape[1]
 
 # Determine the number of complete sequences of length 50
@@ -42,12 +37,9 @@ y = data[:, 1:, 0]   # Only price for the next time step
 def build_generator():
     model = Sequential()
     model.add(LSTM(400, input_shape=(time_step - 1, num_features), return_sequences=True))
-    model.add(Dropout(0.2))
-    model.add(LSTM(400, return_sequences=True))
-    model.add(Dropout(0.2))
-    model.add(LSTM(200))  # Add another LSTM layer
-    model.add(Dense(time_step - 1, activation='linear'))
-    model.add(Reshape((time_step - 1, 1)))
+    model.add(LSTM(400))
+    model.add(Dense(time_step - 1, activation='linear'))  # Change to linear activation
+    model.add(Reshape((time_step - 1, 1)))  # Reshape to output only price
     return model
 
 generator = build_generator()
@@ -55,22 +47,16 @@ generator = build_generator()
 # Define the CNN Discriminator
 def build_discriminator():
     model = Sequential()
-    model.add(layers.Conv1D(32, kernel_size=5, strides=2, padding='same', activation='leaky_relu'))
-    model.add(layers.Conv1D(64, kernel_size=5, strides=2, padding='same', activation='leaky_relu'))
-    model.add(layers.BatchNormalization())
-    model.add(layers.Conv1D(128, kernel_size=5, strides=2, padding='same', activation='leaky_relu'))
-    model.add(layers.BatchNormalization())
-    # Add the two Fully Connected layers
-    model.add(layers.Flatten())  # Flatten the output before feeding into Dense layers
-    model.add(layers.Dense(220, use_bias=False))
-    model.add(layers.BatchNormalization())
-    model.add(layers.LeakyReLU(0.01))
-    model.add(layers.Dense(220, use_bias=False, activation='relu'))
-    model.add(layers.Dense(1))
+    model.add(Conv1D(64, kernel_size=3, strides=2, padding='same', input_shape=(time_step - 1, 1)))
+    model.add(Dropout(0.3))
+    model.add(Conv1D(128, kernel_size=3, strides=2, padding='same'))
+    model.add(Dropout(0.3))
+    model.add(Flatten())
+    model.add(Dense(1, activation='sigmoid'))  # Binary classification
     return model
 
 discriminator = build_discriminator()
-discriminator.compile(loss='mean_squared_error', optimizer=Adam(learning_rate=0.01), metrics=['accuracy'])
+discriminator.compile(loss='binary_crossentropy', optimizer=Adam(0.0002, 0.5), metrics=['accuracy'])
 
 # Build and compile the GAN
 discriminator.trainable = False  # Freeze discriminator when training the generator
@@ -79,22 +65,16 @@ gan_input = Sequential()
 gan_input.add(generator)
 gan_input.add(discriminator)
 
-gan_input.compile(loss='mean_squared_error', optimizer=Adam(learning_rate=0.01))
-
-def add_noise(data, noise_factor=0.1):
-    noise = np.random.normal(loc=0, scale=noise_factor, size=data.shape)
-    return data + noise
+gan_input.compile(loss='binary_crossentropy', optimizer=Adam(0.0002, 0.5))
 
 # Train the GAN
 def train_gan(epochs, batch_size):
     for epoch in range(epochs):
         # Train Discriminator
         idx = np.random.randint(0, num_samples, batch_size)
-        
-        # Add noise to real data
-        real_data = add_noise(y[idx].reshape(-1, time_step - 1, 1))
+        real_data = y[idx].reshape(-1, time_step - 1, 1)
 
-        # Generate synthetic data
+        # Generate synthetic data using the complete feature set
         generated_data = generator.predict(X[idx])
 
         # Train Discriminator
@@ -109,7 +89,7 @@ def train_gan(epochs, batch_size):
             print(f"{epoch} [D loss: {d_loss[0]:.4f}] [G loss: {g_loss[0]:.4f}]")
 
 # Train the GAN
-train_gan(epochs=50, batch_size=64)  # Increased epochs for better learning
+train_gan(epochs=50, batch_size=32)  # Increased epochs for better learning
 
 # Generate New Price Series with context
 def generate_new_series_with_context(last_data, num_samples):
