@@ -8,6 +8,7 @@ import matplotlib.pyplot as plt
 
 from sklearn.decomposition import PCA
 from sklearn.preprocessing import MinMaxScaler, StandardScaler
+from sklearn.impute import SimpleImputer
 from sklearn.metrics import mean_squared_error
 from sklearn.metrics import accuracy_score
 
@@ -22,6 +23,9 @@ from collections import deque
 
 import xgboost as xgb
 from statsmodels.tsa.arima.model import ARIMA
+
+from bayes_opt import BayesianOptimization
+from bayes_opt import UtilityFunction
 
 # just import bert
 import bert
@@ -277,7 +281,7 @@ def plot_gaussian_error():
 # plot_wavelets(data_FT)
 # print_arima_model(data_FT)
 # plot_auto_correlation(data_FT)
-# predict_value(data_FT)
+predict_value(data_FT)
 # plot_regression_test(dataset_TI_df)
 # plot_feature_importances(dataset_TI_df)
 # plot_gaussian_error()
@@ -428,45 +432,41 @@ def train_vae():
     end = time.time()
     print('Training completed in {} seconds.'.format(int(end - start)))
 
-train_vae()
+# train_vae()
 
 vae.summary()
 
 print(vae)
 
-# predictions = vae.predict(test_data)
-# Plot the results
-# plt.figure(figsize=(12, 6))
-# plt.plot(test_data)
-# plt.plot(predictions, linestyle='--')
-# plt.title('Actual vs Predicted Values')
-# plt.xlabel('Days')
-# plt.ylabel('Apple Stock Price')
-# plt.legend()
-# plt.show()
+def plot_vae_train_result():
+    predictions = vae.predict(test_data)
+    # Plot the results
+    plt.figure(figsize=(12, 6))
+    plt.plot(test_data)
+    plt.plot(predictions, linestyle='--')
+    plt.title('Actual vs Predicted Values')
+    plt.xlabel('Days')
+    plt.ylabel('Apple Stock Price')
+    plt.legend()
+    plt.show()
 
 dataset_TI_df['Date'] = dataset_ex_df['Date']
 vae_added_df = np.array(dataset_TI_df.iloc[:, :-1].values)
 print('The shape of the newly created (from the autoencoder) features is {}.'.format(vae_added_df.shape))
 
-# Plot the results
-# plt.figure(figsize=(14, 5))
-# plt.plot(test_data, color='blue', label='Actual Stock Price')
-# plt.plot(np.arange(len(train_data), len(train_data) + len(predictions)), predictions, color='red', label='Predicted Stock Price')
-# plt.title('Stock Price Prediction')
-# plt.xlabel('Time')
-# plt.ylabel('Stock Price')
-# plt.legend()
-# plt.show()
+# plot_vae_train_result()
 
-# ----------------
-
-
-
-
-
+# You can choose a strategy: 'mean', 'median', 'most_frequent', or use a constant value
+imputer = SimpleImputer(strategy='mean')  # or 'median', etc.
 # # We want the PCA to create the new components to explain 80% of the variance
-# pca = PCA(n_components=.8)
+vae_added_df_imputed = imputer.fit_transform(vae_added_df)
+# Standardize the data
+x_pca = StandardScaler().fit_transform(vae_added_df_imputed)
+
+pca = PCA(n_components=.8)
+principalComponents = pca.fit_transform(x_pca)
+print(principalComponents)
+print('principal components {}'.format(pca.n_components_))
 
 
 def lstm_test():
@@ -537,3 +537,113 @@ def lstm_test():
 # lstm_test()
 
 
+class TriangularSchedule():
+    def __init__(self, min_lr, max_lr, cycle_length, inc_fraction=0.5):     
+        self.min_lr = min_lr
+        self.max_lr = max_lr
+        self.cycle_length = cycle_length
+        self.inc_fraction = inc_fraction
+        
+    def __call__(self, iteration):
+        if iteration <= self.cycle_length*self.inc_fraction:
+            unit_cycle = iteration * 1 / (self.cycle_length * self.inc_fraction)
+        elif iteration <= self.cycle_length:
+            unit_cycle = (self.cycle_length - iteration) * 1 / (self.cycle_length * (1 - self.inc_fraction))
+        else:
+            unit_cycle = 0
+        adjusted_cycle = (unit_cycle * (self.max_lr - self.min_lr)) + self.min_lr
+        return adjusted_cycle
+
+class CyclicalSchedule():
+    def __init__(self, schedule_class, cycle_length, cycle_length_decay=1, cycle_magnitude_decay=1, **kwargs):
+        self.schedule_class = schedule_class
+        self.length = cycle_length
+        self.length_decay = cycle_length_decay
+        self.magnitude_decay = cycle_magnitude_decay
+        self.kwargs = kwargs
+    
+    def __call__(self, iteration):
+        cycle_idx = 0
+        cycle_length = self.length
+        idx = self.length
+        while idx <= iteration:
+            cycle_length = math.ceil(cycle_length * self.length_decay)
+            cycle_idx += 1
+            idx += cycle_length
+        cycle_offset = iteration - idx + cycle_length
+        
+        schedule = self.schedule_class(cycle_length=cycle_length, **self.kwargs)
+        return schedule(cycle_offset) * self.magnitude_decay**cycle_idx
+
+def plot_learning_rate_scheduler():
+    schedule = CyclicalSchedule(TriangularSchedule, min_lr=0.5, max_lr=2, cycle_length=500)
+    iterations=1500
+
+    plt.plot([i+1 for i in range(iterations)],[schedule(i) for i in range(iterations)])
+    plt.title('Learning rate for each epoch')
+    plt.xlabel("Epoch")
+    plt.ylabel("Learning Rate")
+    plt.show()
+
+# plot_learning_rate_scheduler()
+
+
+# CNN in GAN
+num_fc = 512
+
+# ... other parts of the GAN
+
+cnn_net = models.Sequential()
+
+# Add the 1D Convolutional layers
+cnn_net.add(layers.Conv1D(32, kernel_size=5, strides=2, padding='same', activation='leaky_relu'))
+cnn_net.add(layers.Conv1D(64, kernel_size=5, strides=2, padding='same', activation='leaky_relu'))
+cnn_net.add(layers.BatchNormalization())
+cnn_net.add(layers.Conv1D(128, kernel_size=5, strides=2, padding='same', activation='leaky_relu'))
+cnn_net.add(layers.BatchNormalization())
+
+# Add the two Fully Connected layers
+cnn_net.add(layers.Flatten())  # Flatten the output before feeding into Dense layers
+cnn_net.add(layers.Dense(220, use_bias=False))
+cnn_net.add(layers.BatchNormalization())
+cnn_net.add(layers.LeakyReLU(0.01))
+cnn_net.add(layers.Dense(220, use_bias=False, activation='relu'))
+cnn_net.add(layers.Dense(1))
+    
+
+# ... other parts of the GAN
+print(cnn_net)
+cnn_net.compile(optimizer='adam', loss='mean_squared_error')
+
+# Fit the model
+# cnn_net.fit(X, y, epochs=100, batch_size=32)
+
+
+# Bayesian optimization
+def black_box_function(x, y):
+    """Function with unknown internals we wish to maximize.
+
+    This is just serving as an example, for all intents and
+    purposes think of the internals of this function, i.e.: the process
+    which generates its output values, as unknown.
+    """
+    return -x ** 2 - (y - 1) ** 2 + 1
+
+# Bounded region of parameter space
+pbounds = {'x': (2, 4), 'y': (-3, 3)}
+
+optimizer = BayesianOptimization(
+    f=black_box_function,
+    pbounds=pbounds,
+    random_state=1,
+)
+optimizer.maximize(
+    init_points=2,
+    n_iter=3,
+)
+print(optimizer.max)
+
+for i, res in enumerate(optimizer.res):
+    print("Iteration {}: \n\t{}".format(i, res))
+
+utility = UtilityFunction(kind="ucb", kappa=2.5, xi=0.0)

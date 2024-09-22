@@ -1,92 +1,93 @@
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
-from tensorflow.keras.models import Sequential
-from tensorflow.keras.layers import LSTM, Dense
-import datetime
+from keras.models import Sequential
+from keras.layers import LSTM, Dense, Reshape, Conv1D, Flatten, Dropout
+from keras.optimizers import Adam
 
-# Generate a sine wave
-def parser(x):
-    return datetime.datetime.strptime(x, '%Y-%m-%d')
+# Generate synthetic time series data
+def generate_time_series_data(n_samples=1000, timesteps=50):
+    x = np.linspace(0, 100, timesteps)
+    data = np.sin(x) + np.random.normal(0, 0.1, (n_samples, timesteps))  # Sinusoidal data with noise
+    return data
 
-# Load dataset
-dataset = pd.read_csv('data/output.csv', header=0)
+data = generate_time_series_data()
+data = (data - np.mean(data)) / np.std(data)  # Normalize
+data = data.reshape(-1, 50, 1)  # Reshape for LSTM
 
-# Define number of training days
-num_training_days = int(dataset.shape[0] * 0.7)
+# Define the LSTM Generator
+def build_generator():
+    model = Sequential()
+    model.add(LSTM(50, input_shape=(50, 1), return_sequences=True))
+    model.add(LSTM(50))
+    model.add(Dense(50, activation='tanh'))
+    model.add(Reshape((50, 1)))  # Reshape back to time-series format
+    return model
 
-train_data, test_data = dataset[:num_training_days], dataset[num_training_days:]
+generator = build_generator()
 
-# Extract multiple features, assuming 'price' and 'MACD' are columns in the dataset
-data = dataset[['price', 'MACD']].values  # Adjust based on your actual features
+# Define the CNN Discriminator
+def build_discriminator():
+    model = Sequential()
+    model.add(Conv1D(64, kernel_size=3, strides=2, padding='same', input_shape=(50, 1)))
+    model.add(Dropout(0.3))
+    model.add(Conv1D(128, kernel_size=3, strides=2, padding='same'))
+    model.add(Dropout(0.3))
+    model.add(Flatten())
+    model.add(Dense(1, activation='sigmoid'))  # Binary classification
+    return model
 
-def create_dataset(data, time_step=1):
-    X, y = [], []
-    for i in range(len(data) - time_step - 1):
-        a = data[i:(i + time_step)]
-        X.append(a)
-        y.append(data[i + time_step, 0])  # Predicting the price (first column)
-    return np.array(X), np.array(y)
+discriminator = build_discriminator()
 
-time_step = 10  # Number of time steps to look back
-X, y = create_dataset(data, time_step)
+# Compile the Discriminator
+discriminator.compile(loss='binary_crossentropy', optimizer=Adam(0.0002, 0.5), metrics=['accuracy'])
 
-# Reshape input to be [samples, time steps, features]
-X = X.reshape(X.shape[0], X.shape[1], X.shape[2])  # Shape: (samples, time_step, features)
-
-model = Sequential()
-# shape=(time_step, features)
-model.add(Input(shape=(time_step, data.shape[1])))  # Define the input shape using Input layer
-model.add(LSTM(50, return_sequences=True))
-model.add(LSTM(50))
-model.add(Dense(1))  # Output layer for price prediction
-
-model.compile(optimizer='adam', loss='mean_squared_error')
-
-# Fit the model
-model.fit(X, y, epochs=100, batch_size=32)
-
-# Starting point for the generation
-last_sequence = data[-time_step:].reshape(1, time_step, data.shape[1])  # Shape: (1, time_step, num_features)
-
-# Before the generation loop
-last_known_volume = data[-1, 1]  # Get the last known volume from the original data
-
-generated_data = []
-num_generate = len(test_data)  # Number of new data points to generate
-
-for _ in range(num_generate):
-    # Get the next predicted value
-    next_value = model.predict(last_sequence)  # Shape: (1, 1)
-    
-    print(f"Predicted next_value shape: {next_value.shape}, value: {next_value}")
-
-    # Extract the scalar value
-    next_value_scalar = next_value[0, 0]  # This should be a scalar
-    
-    # Append the predicted value to the generated data
-    generated_data.append(next_value_scalar)
-
-    # Prepare the next input sequence for the model
-    # Here, you need to create a new sequence by appending the new value.
-    next_value_reshaped = np.array([[next_value_scalar, last_sequence[0, -1, 1]]]).reshape(1, 1, data.shape[1])  # Replace the volume with the last known value or set a default
-
-    # Update last_sequence by appending the new value
-    last_sequence = np.append(last_sequence[:, 1:, :], next_value_reshaped, axis=1)
-    
-    print(f"Updated last_sequence shape: {last_sequence.shape}")
-
-# Create an array for generated data with the same number of features
-generated_data_full = np.array([[val, last_known_volume] for val in generated_data])
-# Combine original and generated data for visualization
-full_data = np.concatenate((data, generated_data_full), axis=0)
+# Note: Compile the Generator (not required for GAN training)
 
 
-# Visualize the results
-plt.plot(np.arange(len(data)), data[:, 0], label='Original Price Data')  # Plot original price
-plt.plot(np.arange(len(data), len(full_data)), generated_data, label='Generated Price Data', color='red')
-plt.title("Generated Time Series Data")
-plt.xlabel("Time")
-plt.ylabel("Price")
+# Build the GAN
+discriminator.trainable = False  # Freeze discriminator when training the generator
+
+gan_input = Sequential()
+gan_input.add(generator)
+gan_input.add(discriminator)
+
+gan_input.compile(loss='binary_crossentropy', optimizer=Adam(0.0002, 0.5))
+
+# Train the GAN
+def train_gan(epochs, batch_size):
+    for epoch in range(epochs):
+        # Train Discriminator
+        idx = np.random.randint(0, data.shape[0], batch_size)
+        real_data = data[idx]
+
+        noise = np.random.normal(0, 1, (batch_size, 50, 1))
+        generated_data = generator.predict(noise)
+
+        d_loss_real = discriminator.train_on_batch(real_data, np.ones((batch_size, 1)))
+        d_loss_fake = discriminator.train_on_batch(generated_data, np.zeros((batch_size, 1)))
+        d_loss = 0.5 * np.add(d_loss_real, d_loss_fake)
+
+        # Train Generator
+        noise = np.random.normal(0, 1, (batch_size, 50, 1))
+        g_loss = gan_input.train_on_batch(noise, np.ones((batch_size, 1)))[0]  # Access the first element (loss)
+
+        if epoch % 100 == 0:
+            print(f"{epoch} [D loss: {d_loss[0]:.4f}, acc.: {100 * d_loss[1]:.2f}] [G loss: {g_loss:.4f}]")
+
+# Train the GAN
+train_gan(epochs=10000, batch_size=32)
+
+# Generate New Time Series
+def generate_new_series(num_samples):
+    noise = np.random.normal(0, 1, (num_samples, 50, 1))
+    generated_series = generator.predict(noise)
+    return generated_series
+
+new_data = generate_new_series(5)
+
+# Plot generated series
+for i in range(new_data.shape[0]):
+    plt.plot(new_data[i].reshape(50,), label=f"Generated Series {i+1}")
 plt.legend()
 plt.show()
