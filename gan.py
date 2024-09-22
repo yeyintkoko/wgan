@@ -56,7 +56,7 @@ def build_discriminator():
     return model
 
 discriminator = build_discriminator()
-discriminator.compile(loss='binary_crossentropy', optimizer=Adam(0.0002, 0.5), metrics=['accuracy'])
+discriminator.compile(loss='mean_squared_error', optimizer=Adam(0.0002, 0.5), metrics=['accuracy'])
 
 # Build and compile the GAN
 discriminator.trainable = False  # Freeze discriminator when training the generator
@@ -65,14 +65,18 @@ gan_input = Sequential()
 gan_input.add(generator)
 gan_input.add(discriminator)
 
-gan_input.compile(loss='binary_crossentropy', optimizer=Adam(0.0002, 0.5))
+gan_input.compile(loss='mean_squared_error', optimizer=Adam(0.0002, 0.5))
+
+def add_noise(data, noise_factor=0.1):
+    noise = np.random.normal(loc=0, scale=noise_factor, size=data.shape)
+    return data + noise
 
 # Train the GAN
 def train_gan(epochs, batch_size):
     for epoch in range(epochs):
         # Train Discriminator
         idx = np.random.randint(0, num_samples, batch_size)
-        real_data = y[idx].reshape(-1, time_step - 1, 1)
+        real_data = add_noise(y[idx].reshape(-1, time_step - 1, 1))
 
         # Generate synthetic data using the complete feature set
         generated_data = generator.predict(X[idx])
@@ -89,7 +93,7 @@ def train_gan(epochs, batch_size):
             print(f"{epoch} [D loss: {d_loss[0]:.4f}] [G loss: {g_loss[0]:.4f}]")
 
 # Train the GAN
-train_gan(epochs=50, batch_size=32)  # Increased epochs for better learning
+train_gan(epochs=250, batch_size=32)  # Increased epochs for better learning
 
 # Generate New Price Series with context
 def generate_new_series_with_context(last_data, num_samples):
