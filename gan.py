@@ -100,7 +100,7 @@ def train_gan(epochs, batch_size):
             print(f"{epoch} [D loss: {d_loss[0]:.4f}] [G loss: {g_loss[0]:.4f}]")
 
 # Train the GAN
-train_gan(epochs=100, batch_size=64)  # Increased epochs for better learning
+train_gan(epochs=150, batch_size=64)  # Increased epochs for better learning
 
 # Generate New Price Series with context
 def generate_new_series_with_context(last_data, num_samples):

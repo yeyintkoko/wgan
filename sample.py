@@ -13,7 +13,7 @@ from sklearn.metrics import mean_squared_error
 from sklearn.metrics import accuracy_score
 
 import tensorflow as tf
-from tensorflow.keras import layers, models
+from tensorflow.keras import layers, models, Model
 from tensorflow.keras.models import Sequential
 from tensorflow.keras.layers import LSTM, Dense, Dropout
 from tensorflow.keras.initializers import HeNormal
@@ -281,7 +281,7 @@ def plot_gaussian_error():
 # plot_wavelets(data_FT)
 # print_arima_model(data_FT)
 # plot_auto_correlation(data_FT)
-predict_value(data_FT)
+# predict_value(data_FT)
 # plot_regression_test(dataset_TI_df)
 # plot_feature_importances(dataset_TI_df)
 # plot_gaussian_error()
@@ -450,7 +450,7 @@ def plot_vae_train_result():
     plt.legend()
     plt.show()
 
-dataset_TI_df['Date'] = dataset_ex_df['Date']
+# dataset_TI_df['Date'] = dataset_ex_df['Date']
 vae_added_df = np.array(dataset_TI_df.iloc[:, :-1].values)
 print('The shape of the newly created (from the autoencoder) features is {}.'.format(vae_added_df.shape))
 
@@ -536,6 +536,67 @@ def lstm_test():
 
 # lstm_test()
 
+# LSTM (RNN) model
+class RNNModel(Model):
+    def __init__(self, num_embed, num_hidden, num_layers, bidirectional=False):
+        super(RNNModel, self).__init__()
+        self.num_hidden = num_hidden
+        
+        # Create a list to hold LSTM layers
+        lstm_layers = []
+        for i in range(num_layers):
+            if bidirectional and i == 0:
+                lstm_layers.append(layers.Bidirectional(LSTM(num_hidden, return_sequences=True)))
+            else:
+                lstm_layers.append(LSTM(num_hidden, return_sequences=True))
+
+        self.rnn = Sequential(lstm_layers)
+        self.decoder = Dense(1)
+
+    def call(self, inputs):
+        output = self.rnn(inputs)
+        output = tf.reshape(output, (-1, self.num_hidden))
+        decoded = self.decoder(output)
+        return decoded
+
+def predict_rnn():
+    # Parameters
+    gan_num_features = dataset_TI_df.shape[1]
+    sequence_length = 17
+
+    # Initialize model
+    lstm_model = RNNModel(num_embed=gan_num_features, num_hidden=500, num_layers=1)
+
+    # Compile the model
+    lstm_model.compile(optimizer=tf.keras.optimizers.Adam(learning_rate=0.01),
+                    loss=tf.keras.losses.MeanAbsoluteError())
+                    
+    # Get the values from your DataFrame after dropping NaNs
+    data = dataset_TI_df.dropna().values
+
+    # Ensure that the data is a float32 array
+    data = data.astype(np.float32)
+
+    # Calculate the maximum number of complete sequences you can have
+    num_samples = data.shape[0]  # Total rows in your data
+    max_sequences = num_samples // sequence_length  # integer division
+
+    # Reshape if possible
+    if max_sequences > 0:
+        reshaped_data = data[:max_sequences * sequence_length].reshape(-1, sequence_length, gan_num_features)
+        # Check the type and shape of reshaped_data
+        print(f"Reshaped Data Type: {reshaped_data.dtype}, Shape: {reshaped_data.shape}")
+
+        # Make predictions
+        predictions = lstm_model.predict(reshaped_data)
+        print("Predictions:", predictions)
+    else:
+        print("Not enough data to create sequences.")
+
+    print('--------- RNN predictions ------')
+    print(predictions)
+    
+predict_rnn()
 
 class TriangularSchedule():
     def __init__(self, min_lr, max_lr, cycle_length, inc_fraction=0.5):     
