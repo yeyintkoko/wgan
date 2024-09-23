@@ -3,27 +3,29 @@ import numpy as np
 import pandas as pd
 from sklearn.preprocessing import StandardScaler
 from sklearn.model_selection import train_test_split
-from sklearn.datasets import load_iris
+from sklearn.linear_model import LinearRegression
+from sklearn.metrics import mean_squared_error
+from sklearn.metrics import accuracy_score
 
 # Import Keras for implementing autoencoders
-import keras
+import keras 
 from keras.models import Sequential
 
-# load the Iris dataset
-iris = load_iris()
-data = iris.data
-target = iris.target
+# Load the dataset
+dataset = pd.read_csv("data/output.csv", header=0).dropna()
+data = dataset.iloc[:, 1:].values
+target = dataset.iloc[:, 0].values
 
-# Standardize the data
+# Standardize the training data
 scaler = StandardScaler()
 data = scaler.fit_transform(data)
 
 # Split the data into training and test sets
-X_train, X_test, y_train, y_test = train_test_split(data, target,                                                    test_size=0.2, random_state=42)
+X_train, X_test, y_train, y_test = train_test_split(data, target, test_size=0.3, random_state=42)
 
 # Define the autoencoder architecture
 input_dim = X_train.shape[1]
-encoding_dim = 2
+encoding_dim = 50
 
 # Set the encoding dimension
 input_layer = keras.layers.Input(shape=(input_dim,))
@@ -49,17 +51,14 @@ encoded_features_test = encoder.predict(X_test)
 print("Encoded Features Shape (Train):", encoded_features_train.shape)
 print("Encoded Features Shape (Test):", encoded_features_test.shape)
 
-# Import a predictive model (e.g., logistic regression)
-from sklearn.linear_model import LogisticRegression
-from sklearn.metrics import accuracy_score
 
-# Fit a logistic regression model using the selected features
-model = LogisticRegression()
+# Fit a LinearRegression regression model using the selected features
+model = LinearRegression()
 model.fit(encoded_features_train, y_train)
 
 # Make predictions on the test set
 y_pred = model.predict(encoded_features_test)
 
 # Calculate accuracy
-accuracy = accuracy_score(y_test, y_pred)
-print("Accuracy with Selected Features:", accuracy)
+mse = mean_squared_error(y_test, y_pred)
+print("Mean Squared Error with Selected Features:", mse)

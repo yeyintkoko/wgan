@@ -48,7 +48,7 @@ print('Number of training days: {}. Number of test days: {}.'.format(num_trainin
 def plot_stock_price(dataset):
     plt.figure(figsize=(14, 5), dpi=100)
     plt.plot(dataset['Date'], dataset['price'], label='Apple stock')
-    plt.vlines(datetime.date(2016,4, 20), 0, 270, linestyles='--', colors='gray', label='Train/Test data cut-off')
+    plt.vlines(datetime.date(2022, 6, 1), 0, 270, linestyles='--', colors='gray', label='Train/Test data cut-off')
     plt.xlabel('Date')
     plt.ylabel('USD')
     plt.title('Figure 1: Apple stock price')
@@ -83,9 +83,6 @@ def get_technical_indicators(dataset):
 
 dataset_TI_df = get_technical_indicators(dataset_ex_df[['price']])
 dataset_TI_df.head()
-
-# Save the DataFrame to a CSV file
-# dataset_TI_df.to_csv('data/output.csv', index=False)
 
 def plot_technical_indicators(dataset, last_days):
     plt.figure(figsize=(16, 10), dpi=100)
@@ -152,7 +149,7 @@ def plot_wavelets(dataset):
 
 data_FT = dataset_ex_df[['Date', 'price']]
 fft_df = get_fft_dataframe(data_FT)
-
+del fft_df['fft']
 dataset_feat_df = dataset_ex_df
 del dataset_feat_df['Date']
 del dataset_feat_df['price']
@@ -283,7 +280,7 @@ def plot_gaussian_error():
     plt.show()
 
 
-# plot_stock_price(dataset_ex_df)
+plot_stock_price(data_FT)
 # plot_technical_indicators(dataset_TI_df, 400)
 # plot_fourier_transforms(data_FT)
 # plot_wavelets(data_FT)

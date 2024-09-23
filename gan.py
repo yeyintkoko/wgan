@@ -32,15 +32,15 @@ data = data.reshape(num_samples, time_step, num_features)
 
 # Prepare input X (all features) and output y (only price)
 X = data[:, :-1, :]  # All but the last time step as input
-y = data[:, 1:, 0]   # Only price for the next time step
+y = data[:, -1, 0]   # Only price for the next time step
 
 # Define the LSTM Generator
 def build_generator():
     model = Sequential()
     model.add(LSTM(400, input_shape=(time_step - 1, num_features), return_sequences=True))
     model.add(LSTM(400))
-    model.add(Dense(time_step - 1, activation='linear'))  # Change to linear activation
-    model.add(Reshape((time_step - 1, 1)))  # Reshape to output only price
+    model.add(Dense(num_features, activation='linear'))  # Change to linear activation
+    model.add(Reshape((1, num_features)))  # Reshape to output only price
     return model
 
 generator = build_generator()
@@ -83,10 +83,19 @@ def train_gan(epochs, batch_size):
     for epoch in range(epochs):
         # Train Discriminator
         idx = np.random.randint(0, num_samples, batch_size)
-        real_data = add_noise(y[idx].reshape(-1, time_step - 1, 1))
+        
+        # Real data
+        real_data = add_noise(y[idx].reshape(-1, 1))  # Shape: (batch_size, 1)
+        
+        # Check and repeat to create 20 features
+        real_data = np.repeat(real_data, 20, axis=1)  # Now shape is (batch_size, 20)
+        real_data = real_data.reshape(batch_size, 1, 20)  # Reshape to (batch_size, 1, 20)
 
         # Generate synthetic data using the complete feature set
         generated_data = generator.predict(X[idx])
+        
+        # Ensure generated_data has the correct shape
+        generated_data = generated_data.reshape(batch_size, 1, 20)  # Ensure shape matches
 
         # Train Discriminator
         d_loss_real = discriminator.train_on_batch(real_data, np.ones((batch_size, 1)))
@@ -99,8 +108,9 @@ def train_gan(epochs, batch_size):
         if epoch % 100 == 0:
             print(f"{epoch} [D loss: {d_loss[0]:.4f}] [G loss: {g_loss[0]:.4f}]")
 
+
 # Train the GAN
-train_gan(epochs=1000, batch_size=64)  # Increased epochs for better learning
+train_gan(epochs=150, batch_size=64)  # Increased epochs for better learning
 
 # Generate New Price Series with context
 def generate_new_series_with_context(last_data, num_samples):
@@ -133,7 +143,7 @@ new_data = generate_new_series_with_context(last_context, generate_num)
 # Plot generated price series
 plt.figure(figsize=(10, 5))
 plt.plot(new_data, label='Generated', alpha=0.3)
-# plt.plot(test_data.values[:, 0], label='Real Price', alpha=0.7)  # Plot real prices
-# plt.title("Generated Price Series vs Real Price")
+plt.plot(test_data.values[:, 0], label='Real', alpha=0.7)  # Plot real prices
+plt.title("Generated Series vs Real")
 plt.legend()
 plt.show()

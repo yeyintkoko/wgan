@@ -22,12 +22,12 @@ from statsmodels.graphics.tsaplots import plot_acf
 
 # print('----- data after reshape---- {}'.format(VAE_data))
  
-def parser(x):
-    return datetime.datetime.strptime(x, '%m/%d/%Y')
+# def parser(x):
+#     return datetime.datetime.strptime(x, '%m/%d/%Y')
 
-# read the data from the csv
-data = pd.read_csv("data/panel_data_close.csv",
-                   header=0, index_col=0, parse_dates=[0], date_format=parser)
+# # read the data from the csv
+# dataset = pd.read_csv("data/panel_data_close.csv",
+#                    header=0, index_col=0, parse_dates=[0], date_format=parser)
 
 # pd.DataFrame.corr(method = 'pearson')
 
@@ -56,4 +56,10 @@ data = pd.read_csv("data/panel_data_close.csv",
 # result = autocorrelation_plot(dataframe)
 # print(result)
 # plt.show()
+
+
+
+# Prepare input X (all features) and output y (only price)
+# X = data[:, :-1, :]  # All but the last time step as input
+# y = data[:, 1:, 0]   # Only price for the next time step
 
