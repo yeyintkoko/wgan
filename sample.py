@@ -34,7 +34,7 @@ import warnings
 warnings.filterwarnings("ignore")
 
 def parser(x):
-    return datetime.datetime.strptime(x, '%Y-%m-%d')
+    return datetime.datetime.strptime(x, '%m/%d/%Y')
 
 dataset_ex_df = pd.read_csv('data/panel_data_close.csv', header=0, parse_dates=[0], date_parser=parser)
 
@@ -85,7 +85,7 @@ dataset_TI_df = get_technical_indicators(dataset_ex_df[['price']])
 dataset_TI_df.head()
 
 # Save the DataFrame to a CSV file
-dataset_TI_df.to_csv('data/output.csv', index=False)
+# dataset_TI_df.to_csv('data/output.csv', index=False)
 
 def plot_technical_indicators(dataset, last_days):
     plt.figure(figsize=(16, 10), dpi=100)
@@ -151,6 +151,14 @@ def plot_wavelets(dataset):
     plt.show()
 
 data_FT = dataset_ex_df[['Date', 'price']]
+fft_df = get_fft_dataframe(data_FT)
+
+dataset_feat_df = dataset_ex_df
+del dataset_feat_df['Date']
+del dataset_feat_df['price']
+dataset_total_df = pd.concat([dataset_TI_df, fft_df, dataset_feat_df], axis=1)
+# Save the DataFrame to a CSV file
+dataset_total_df.to_csv('data/output.csv', index=False)
 
 def print_arima_model(dataset):
     series = dataset['price']

@@ -23,7 +23,7 @@ from statsmodels.graphics.tsaplots import plot_acf
 # print('----- data after reshape---- {}'.format(VAE_data))
  
 def parser(x):
-    return datetime.datetime.strptime(x, '%Y-%m-%d')
+    return datetime.datetime.strptime(x, '%m/%d/%Y')
 
 # read the data from the csv
 data = pd.read_csv("data/panel_data_close.csv",
