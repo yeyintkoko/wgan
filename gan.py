@@ -37,8 +37,8 @@ y = data[:, 1:, 0]   # Only price for the next time step
 # Define the LSTM Generator
 def build_generator():
     model = Sequential()
-    model.add(LSTM(50, input_shape=(time_step - 1, num_features), return_sequences=True))
-    model.add(LSTM(50))
+    model.add(LSTM(400, input_shape=(time_step - 1, num_features), return_sequences=True))
+    model.add(LSTM(400))
     model.add(Dense(time_step - 1, activation='linear'))  # Change to linear activation
     model.add(Reshape((time_step - 1, 1)))  # Reshape to output only price
     return model
@@ -100,7 +100,7 @@ def train_gan(epochs, batch_size):
             print(f"{epoch} [D loss: {d_loss[0]:.4f}] [G loss: {g_loss[0]:.4f}]")
 
 # Train the GAN
-train_gan(epochs=150, batch_size=64)  # Increased epochs for better learning
+train_gan(epochs=1000, batch_size=64)  # Increased epochs for better learning
 
 # Generate New Price Series with context
 def generate_new_series_with_context(last_data, num_samples):
@@ -132,8 +132,8 @@ new_data = generate_new_series_with_context(last_context, generate_num)
 
 # Plot generated price series
 plt.figure(figsize=(10, 5))
-plt.plot(new_data, label='Generated Price', alpha=0.3)
-plt.plot(test_data.values[:, 0], label='Real Price', alpha=0.7)  # Plot real prices
-plt.title("Generated Price Series vs Real Price")
+plt.plot(new_data, label='Generated', alpha=0.3)
+# plt.plot(test_data.values[:, 0], label='Real Price', alpha=0.7)  # Plot real prices
+# plt.title("Generated Price Series vs Real Price")
 plt.legend()
 plt.show()
