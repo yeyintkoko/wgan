@@ -1,9 +1,9 @@
 import numpy as np
-import pandas as pd
-import datetime
-from pandas.plotting import autocorrelation_plot
-import matplotlib.pyplot as plt
-from statsmodels.graphics.tsaplots import plot_acf
+# import pandas as pd
+# import datetime
+# from pandas.plotting import autocorrelation_plot
+# import matplotlib.pyplot as plt
+# from statsmodels.graphics.tsaplots import plot_acf
 
 # Assume VAE_data is your input data
 # If VAE_data is a pandas DataFrame, convert it to a numpy array
@@ -63,3 +63,27 @@ from statsmodels.graphics.tsaplots import plot_acf
 # X = data[:, :-1, :]  # All but the last time step as input
 # y = data[:, 1:, 0]   # Only price for the next time step
 
+from test_slice import X, y, num_samples, num_feature
+batch_size = 64
+idx = np.random.randint(0, num_samples, batch_size)
+print(idx)
+print('------')
+print(X)
+print('------')
+print(y)
+print('------')
+print(X[idx])
+print('------')
+print(y[idx])
+
+y1 = y[idx]
+y1 = np.repeat(y1, num_feature)
+print('------- repeated y--- {}'.format(y1))
+print('------')
+print(y1.reshape(-1, 1, num_feature))
+
+# X1 = X[idx]
+# X1 = np.repeat(X1, num_feature, axis=1) 
+# print('------- repeated X --- {}'.format(v))
+# print('------')
+# print(X1.reshape(-1, 1, num_feature))

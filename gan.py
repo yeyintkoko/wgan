@@ -74,10 +74,6 @@ gan_input.add(discriminator)
 
 gan_input.compile(loss='mean_squared_error', optimizer=Adam(0.0002, 0.5))
 
-def add_noise(data, noise_factor=0.1):
-    noise = np.random.normal(loc=0, scale=noise_factor, size=data.shape)
-    return data + noise
-
 # Train the GAN
 def train_gan(epochs, batch_size):
     for epoch in range(epochs):
@@ -85,17 +81,15 @@ def train_gan(epochs, batch_size):
         idx = np.random.randint(0, num_samples, batch_size)
         
         # Real data
-        real_data = add_noise(y[idx].reshape(-1, 1))  # Shape: (batch_size, 1)
-        
-        # Check and repeat to create 20 features
-        real_data = np.repeat(real_data, 20, axis=1)  # Now shape is (batch_size, 20)
-        real_data = real_data.reshape(batch_size, 1, 20)  # Reshape to (batch_size, 1, 20)
+        real_data = y[idx]
+        real_data = np.repeat(real_data, num_features)
+        real_data = real_data.reshape(-1, 1, num_features)
 
         # Generate synthetic data using the complete feature set
         generated_data = generator.predict(X[idx])
         
         # Ensure generated_data has the correct shape
-        generated_data = generated_data.reshape(batch_size, 1, 20)  # Ensure shape matches
+        generated_data = generated_data.reshape(-1, 1, num_features)  # Ensure shape matches
 
         # Train Discriminator
         d_loss_real = discriminator.train_on_batch(real_data, np.ones((batch_size, 1)))
@@ -110,7 +104,7 @@ def train_gan(epochs, batch_size):
 
 
 # Train the GAN
-train_gan(epochs=150, batch_size=64)  # Increased epochs for better learning
+train_gan(epochs=50, batch_size=64)  # Increased epochs for better learning
 
 # Generate New Price Series with context
 def generate_new_series_with_context(last_data, num_samples):
@@ -118,10 +112,10 @@ def generate_new_series_with_context(last_data, num_samples):
 
     for _ in range(num_samples):
         context = last_data[-(time_step - 1):].reshape(1, time_step - 1, num_features)
-        new_price = generator.predict(context)
+        new_price = gan_input.predict(context)
         
         # Scale to [10, 600] if necessary (based on your original range)
-        new_price_value = new_price[-1, 0, 0]
+        new_price_value = new_price[-1, 0]
         new_price_value = np.clip(new_price_value, 0, 1)  # Clip to [0, 1]
         new_price_value = new_price_value * (600 - 10) + 10  # Scale to [10, 600]
         

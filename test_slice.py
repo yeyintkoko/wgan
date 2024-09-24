@@ -7,21 +7,21 @@ df = pd.DataFrame({
     'C': [7, 8, 9, 3, 5, 5, 6, 2, 8, 0]
 })
 
-print(df)
-print(df.shape)
+# print(df)
+# print(df.shape)
 
-number_feature = df.shape[1]
+num_feature = df.shape[1]
 time_step = 3
-number_sample = len(df) // time_step
-df = df[:number_sample * time_step]
+num_samples = len(df) // time_step
+df = df[:num_samples * time_step]
 df = np.array(df)
-df = df.reshape(number_sample, time_step, number_feature)
-print('---- df after resahped ----')
-print(df)
-print(df.shape)
+df = df.reshape(num_samples, time_step, num_feature)
+# print('---- df after resahped ----')
+# print(df)
+# print(df.shape)
 
 X = df[:, :-1, :]
-print(X)
+# print(X)
 
 y = df[:, -1, 0]
-print(y)
+# print(y)
