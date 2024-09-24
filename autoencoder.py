@@ -13,8 +13,12 @@ from keras.models import Sequential
 
 # Load the dataset
 dataset = pd.read_csv("data/output.csv", header=0).dropna()
-data = dataset.iloc[:, :].values
+dataset = dataset[::-1].reset_index(drop=True)
+data = dataset.iloc[:, 1:].values
 target = dataset.iloc[:, 0].values
+
+# Set print options for NumPy
+np.set_printoptions(suppress=True, precision=6)
 
 # Standardize the training data
 scaler = StandardScaler()
@@ -51,14 +55,16 @@ encoded_features_test = encoder.predict(X_test)
 print("Encoded Features Shape (Train):", encoded_features_train.shape)
 print("Encoded Features Shape (Test):", encoded_features_test.shape)
 
+# ------------------ autocorrelation ------------
 
-# # Fit a LinearRegression regression model using the selected features
-# model = LinearRegression()
-# model.fit(encoded_features_train, y_train)
+def autocorrelation(data, lag=1):
+    """Calculate autocorrelation for each feature."""
+    return [data.iloc[:, i].autocorr(lag) for i in range(data.shape[1])]
 
-# # Make predictions on the test set
-# y_pred = model.predict(encoded_features_test)
+autocorr_values = autocorrelation(pd.DataFrame(encoded_features_train), lag=1)
 
-# # Calculate accuracy
-# mse = mean_squared_error(y_test, y_pred)
-# print("Mean Squared Error with Selected Features:", mse)
+# Convert autocorr_values to a NumPy array for easy manipulation
+weights = np.array(autocorr_values)
+
+# Apply the weights to your input features
+weighted_encoded_features_train = encoded_features_train * weights

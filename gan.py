@@ -5,19 +5,21 @@ from keras.models import Sequential, Model
 from keras.layers import LSTM, Dense, Input, Reshape, Conv1D, Flatten, Dropout
 from keras.optimizers import Adam
 from sklearn.metrics import mean_squared_error
-from autoencoder import encoded_features_train, y_train, target, encoded_features_test
+from autoencoder import encoded_features_train, weighted_encoded_features_train, y_train, target
+
+np.set_printoptions(suppress=True, precision=6)
 
 num_training_days = int(target.shape[0] * .7)
 
 # Define sequence length and number of features
 time_step = 50
-num_features = encoded_features_train.shape[1]
+num_features = weighted_encoded_features_train.shape[1]
 
 # Determine the number of complete sequences of length 50
-num_samples = len(encoded_features_train) // time_step
+num_samples = len(weighted_encoded_features_train) // time_step
 
 # Truncate and reshape the data
-data_train = encoded_features_train[:num_samples * time_step]
+data_train = weighted_encoded_features_train[:num_samples * time_step]
 data_train = data_train.reshape(num_samples, time_step, num_features)
 target_train = y_train[:num_samples * time_step]
 target_train = target_train.reshape(num_samples, time_step, 1)
@@ -42,11 +44,20 @@ generator.compile(loss='mean_squared_error', optimizer=Adam(0.0002, 0.5))
 def build_discriminator():
     model = Sequential()
     model.add(Input(shape=(1, 1)))  # Change input shape to match generated data
-    model.add(Conv1D(64, kernel_size=3, strides=1, padding='same', activation='leaky_relu'))
-    model.add(Dropout(0.3))
-    model.add(Conv1D(128, kernel_size=3, strides=1, padding='same', activation='leaky_relu'))
-    model.add(Dropout(0.3))
-    model.add(Flatten())
+
+    # Add the 1D Convolutional layers
+    model.add(layers.Conv1D(32, kernel_size=5, strides=2, padding='same', activation='leaky_relu'))
+    model.add(layers.Conv1D(64, kernel_size=5, strides=2, padding='same', activation='leaky_relu'))
+    model.add(layers.BatchNormalization())
+    model.add(layers.Conv1D(128, kernel_size=5, strides=2, padding='same', activation='leaky_relu'))
+    model.add(layers.BatchNormalization())
+
+    # Add the two Fully Connected layers
+    model.add(layers.Flatten())  # Flatten the output before feeding into Dense layers
+    model.add(layers.Dense(220, use_bias=False))
+    model.add(layers.BatchNormalization())
+    model.add(layers.LeakyReLU(0.01))
+    model.add(layers.Dense(220, use_bias=False, activation='relu'))
     model.add(Dense(1, activation='sigmoid'))  # Binary classification
     return model
 
@@ -89,7 +100,7 @@ def train_gan(epochs, batch_size):
             print(f"{epoch} [D loss: {d_loss[0]:.4f}] [G loss: {g_loss[0]:.4f}]")
 
 # Train the GAN
-train_gan(epochs=50, batch_size=64)
+train_gan(epochs=150, batch_size=64)
 
 # Generate New Price Series with context
 def generate_new_series_with_context(last_data, num_samples):
@@ -113,7 +124,7 @@ def generate_new_series_with_context(last_data, num_samples):
     return np.array(generated_series)
 
 # Generate new price series
-last_history = encoded_features_test[-1, :]
+last_history = weighted_encoded_features_train[-1, :]
 generate_num = len(target[num_training_days:])
 new_data = generate_new_series_with_context(last_history, generate_num)
 
@@ -123,7 +134,7 @@ print("Mean Squared Error with Selected Features:", mse)
 # Plot generated price series
 plt.figure(figsize=(10, 5))
 plt.plot(new_data, label='Generated', alpha=0.3)
-plt.plot(target[num_training_days:], label='Real', alpha=0.7)  # Plot real prices
-plt.title("Generated Series vs Real")
+# plt.plot(target[num_training_days:], label='Real', alpha=0.7)  # Plot real prices
+# plt.title("Generated Series vs Real")
 plt.legend()
 plt.show()
