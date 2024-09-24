@@ -50,6 +50,7 @@ encoded_features_test = encoder.predict(X_test)
 # Display the shape of extracted features
 print("Encoded Features Shape (Train):", encoded_features_train.shape)
 print("Encoded Features Shape (Test):", encoded_features_test.shape)
+print('y_train shape:', y_train.shape)
 
 
 # Fit a LinearRegression regression model using the selected features

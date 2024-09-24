@@ -5,6 +5,7 @@ from keras import layers
 from keras.models import Sequential
 from keras.layers import LSTM, Dense, Reshape, Conv1D, Flatten, Dropout
 from keras.optimizers import Adam
+from autoencoder import encoded_features_train, y_train
 
 # Load dataset
 dataset = pd.read_csv('data/output.csv', header=0)
@@ -21,23 +22,25 @@ data = (data - np.mean(data, axis=0)) / np.std(data, axis=0)
 
 # Define sequence length and number of features
 time_step = 50
-num_features = data.shape[1]
+num_features = encoded_features_train.shape[1]
 
 # Determine the number of complete sequences of length 50
-num_samples = len(data) // time_step
+num_samples = len(encoded_features_train) // time_step
 
 # Truncate and reshape the data
-data = data[:num_samples * time_step]
+data = encoded_features_train[:num_samples * time_step]
 data = data.reshape(num_samples, time_step, num_features)
+y_train = y_train[:num_samples * time_step]
+# y_train = y_train.reshape(num_samples, time_step, 1)
 
 # Prepare input X (all features) and output y (only price)
-X = data[:, :-1, :]  # All but the last time step as input
-y = data[:, -1, 0]   # Only price for the next time step
+X = data #data[:, :-1, :]  # All but the last time step as input
+y = y_train #data[:, -1, 0]   # Only price for the next time step
 
 # Define the LSTM Generator
 def build_generator():
     model = Sequential()
-    model.add(LSTM(400, input_shape=(time_step - 1, num_features), return_sequences=True))
+    model.add(LSTM(400, input_shape=(time_step, num_features), return_sequences=True))
     model.add(LSTM(400))
     model.add(Dense(num_features, activation='linear'))  # Change to linear activation
     model.add(Reshape((1, num_features)))  # Reshape to output only price
@@ -104,20 +107,20 @@ def train_gan(epochs, batch_size):
 
 
 # Train the GAN
-train_gan(epochs=50, batch_size=64)  # Increased epochs for better learning
+train_gan(epochs=100, batch_size=64)  # Increased epochs for better learning
 
 # Generate New Price Series with context
 def generate_new_series_with_context(last_data, num_samples):
     generated_series = []
 
     for _ in range(num_samples):
-        context = last_data[-(time_step - 1):].reshape(1, time_step - 1, num_features)
+        context = last_data[-(time_step):].reshape(1, time_step, num_features)
         new_price = gan_input.predict(context)
         
-        # Scale to [10, 600] if necessary (based on your original range)
+        # Scale to [10, 300] if necessary (based on your original range)
         new_price_value = new_price[-1, 0]
         new_price_value = np.clip(new_price_value, 0, 1)  # Clip to [0, 1]
-        new_price_value = new_price_value * (600 - 10) + 10  # Scale to [10, 600]
+        new_price_value = new_price_value * (300 - 10) + 10  # Scale to [10, 300]
         
         generated_series.append(new_price_value)
 
@@ -137,7 +140,7 @@ new_data = generate_new_series_with_context(last_context, generate_num)
 # Plot generated price series
 plt.figure(figsize=(10, 5))
 plt.plot(new_data, label='Generated', alpha=0.3)
-plt.plot(test_data.values[:, 0], label='Real', alpha=0.7)  # Plot real prices
-plt.title("Generated Series vs Real")
+# plt.plot(test_data.values[:, 0], label='Real', alpha=0.7)  # Plot real prices
+# plt.title("Generated Series vs Real")
 plt.legend()
 plt.show()
