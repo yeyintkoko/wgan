@@ -13,7 +13,7 @@ from keras.models import Sequential
 
 # Load the dataset
 dataset = pd.read_csv("data/output.csv", header=0).dropna()
-data = dataset.iloc[:, 1:].values
+data = dataset.iloc[:, :].values
 target = dataset.iloc[:, 0].values
 
 # Standardize the training data
@@ -25,7 +25,7 @@ X_train, X_test, y_train, y_test = train_test_split(data, target, test_size=0.3,
 
 # Define the autoencoder architecture
 input_dim = X_train.shape[1]
-encoding_dim = 50
+encoding_dim = 25
 
 # Set the encoding dimension
 input_layer = keras.layers.Input(shape=(input_dim,))
@@ -50,16 +50,15 @@ encoded_features_test = encoder.predict(X_test)
 # Display the shape of extracted features
 print("Encoded Features Shape (Train):", encoded_features_train.shape)
 print("Encoded Features Shape (Test):", encoded_features_test.shape)
-print('y_train shape:', y_train.shape)
 
 
-# Fit a LinearRegression regression model using the selected features
-model = LinearRegression()
-model.fit(encoded_features_train, y_train)
+# # Fit a LinearRegression regression model using the selected features
+# model = LinearRegression()
+# model.fit(encoded_features_train, y_train)
 
-# Make predictions on the test set
-y_pred = model.predict(encoded_features_test)
+# # Make predictions on the test set
+# y_pred = model.predict(encoded_features_test)
 
-# Calculate accuracy
-mse = mean_squared_error(y_test, y_pred)
-print("Mean Squared Error with Selected Features:", mse)
+# # Calculate accuracy
+# mse = mean_squared_error(y_test, y_pred)
+# print("Mean Squared Error with Selected Features:", mse)
