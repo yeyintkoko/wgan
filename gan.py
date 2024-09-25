@@ -106,26 +106,34 @@ divider = len(batch_sizes) // 2
 batch_size = batch_sizes[divider]
 
 # Train the GAN
-train_gan(epochs=50, batch_size=batch_size)
+train_gan(epochs=100, batch_size=batch_size)
 
 # Generate New Price Series with context
 def generate_new_series_with_context(last_data, num_samples):
     generated_series = []
     last_data = np.repeat(last_data, time_step - 1)
+    num_features_actual = data.shape[1]
 
     for _ in range(num_samples):
         context = last_data.reshape(1, time_step - 1, num_features)
         new_price = gan_model.predict(context)
 
-        new_price = new_price[0, 0]  # Extract the new price
-        num_actual_feature = data.shape[1]
-        new_price_features = np.array([[new_price] + [0] * (num_actual_feature - 1)]) # 0 for the features
-        new_price_values = scaler.inverse_transform(new_price_features) # reverse scale transform to actual value
-        predicted_price = new_price_values[0,0]
-        
+        # Extract the new price
+        new_price_value = new_price[0, 0]
+
+        # Prepare features for inverse scaling
+        new_price_features = np.zeros((1, num_features_actual))
+        new_price_features[0, 0] = new_price_value  # Set the predicted price
+        new_price_features[0, 1:] = np.random.rand(num_features_actual - 1)  # Example random features
+
+        # Inverse transform to get the actual predicted price
+        new_price_values = scaler.inverse_transform(new_price_features)
+        predicted_price = new_price_values[0, 0]  # Actual price
+        print('predicted', predicted_price)
+
         generated_series.append(predicted_price)
 
-        # Update last_data with the new generated price
+        # Update last_data with the new generated price and dynamic features
         new_features = last_data[1:].copy()  # Get the last features except price
         last_data = np.concatenate(([predicted_price], new_features), axis=0)
 
@@ -142,7 +150,7 @@ print("Mean Squared Error with Selected Features:", mse)
 # Plot generated price series
 plt.figure(figsize=(10, 5))
 plt.plot(new_data, label='Generated', alpha=0.3)
-plt.plot(target[num_training_days:], label='Real', alpha=0.7)  # Plot real prices
-plt.title("Generated Series vs Real")
+# plt.plot(target[num_training_days:], label='Real', alpha=0.7)  # Plot real prices
+# plt.title("Generated Series vs Real")
 plt.legend()
 plt.show()
