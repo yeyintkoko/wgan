@@ -6,21 +6,27 @@ from keras.layers import LSTM, Dense, Input, Reshape, Conv1D, Flatten, Dropout
 from keras.optimizers import Adam
 from sklearn.metrics import mean_squared_error
 from sklearn.preprocessing import StandardScaler
-from autoencoder import encoded_features_test, weighted_encoded_features_train, y_train, target, scaler, data
+from autoencoder import encoded_features_test, encoded_features_train, weighted_encoded_features_train, y_train, y_test, scaler, train_data, target_data
 
 np.set_printoptions(suppress=True, precision=6)
 
-num_training_days = int(target.shape[0] * .7)
+num_training_days = int(train_data.shape[0]*.7)
+features_train_data = train_data[:num_training_days] #encoded_features_train
+features_test = train_data[num_training_days:] #encoded_features_test
+
+target_train_data = target_data[:num_training_days] #y_train
+target_test = target_data[num_training_days:] #y_test
 
 # Define sequence length and number of features
-time_step = 2
-num_features = weighted_encoded_features_train.shape[1]
-num_samples = len(weighted_encoded_features_train) // time_step
+time_step = 50
+num_features = features_train_data.shape[1]
+num_features_actual = train_data.shape[1]
+num_samples = len(features_train_data) // time_step
 
 # Truncate and reshape the data
-data_train = weighted_encoded_features_train[:num_samples * time_step]
+data_train = features_train_data[:num_samples * time_step]
 data_train = data_train.reshape(num_samples, time_step, num_features)
-target_train = y_train[:num_samples * time_step]
+target_train = target_train_data[:num_samples * time_step]
 target_train = target_train.reshape(num_samples, time_step, 1)
 
 X = data_train[:, :-1, :]
@@ -103,54 +109,57 @@ def get_divisors(n):
 
 batch_sizes = get_divisors(num_samples)
 divider = len(batch_sizes) // 2
-batch_size = batch_sizes[divider]
+batch_size = batch_sizes[divider-1]
 
 # Train the GAN
-train_gan(epochs=150, batch_size=batch_size)
+train_gan(epochs=350, batch_size=batch_size)
 
 # Generate New Price Series with context
 def generate_new_series_with_context(last_data, num_samples):
     generated_series = []
-    num_features_actual = data.shape[1]
 
     for _ in range(num_samples):
-        # last_data = np.repeat(last_data, time_step - 1)
-        context = last_data.reshape(1, 1, num_features)
-        new_price = gan_model.predict(context)
+        context = last_data.reshape(1, time_step - 1, num_features)
+        predicted_value = gan_model.predict(context)
 
         # Extract the new price
-        new_price_value = new_price[0, 0]
+        predicted_price = predicted_value[0, 0]
 
         # Prepare features for inverse scaling
-        new_price_features = np.zeros((1, num_features_actual))
-        new_price_features[0, 0] = new_price_value  # Set the predicted price
-        new_price_features[0, 1:] = np.random.rand(num_features_actual - 1)  # Example random features
-
-        # Inverse transform to get the actual predicted price
-        new_price_values = scaler.inverse_transform(new_price_features)
-        predicted_price = new_price_values[0, 0]  # Actual price
+        new_features = np.zeros((1, num_features))
+        new_features[0, 0] = predicted_price  # Set the predicted price
+        new_features[0, 1:] = np.random.uniform(10, 200, num_features - 1)  # Example random features
 
         generated_series.append(predicted_price)
 
         # Update last_data with the new generated price and dynamic features
-        new_features = np.random.uniform(low=10.0, high=300.0, size=num_features - 1) #last_data[1:].copy()  # Get the last features except price
-        last_data = np.concatenate(([predicted_price], new_features), axis=0)
+        last_data = last_data[1:]
+        last_data = np.concatenate((last_data, new_features), axis=0)
 
     return np.array(generated_series)
 
 # Generate new price series
-last_history = encoded_features_test[0, :]
-generate_num = len(target[num_training_days:])
+last_sample = data_train[num_samples-1]
+last_sample = last_sample[2:]
+last_history = np.concatenate((last_sample, [features_test[0, :]]), axis=0)
+
+generate_num = len(target_test)
 new_data = generate_new_series_with_context(last_history, generate_num)
 
-mse = mean_squared_error(target[num_training_days:], new_data)
+# Inverse transform to get the actual predicted price
+new_prices = []
+for price in new_data:
+    new_features = scaler.inverse_transform(np.repeat(price, num_features_actual).reshape(1, -1))
+    new_prices.append(new_features[0,0])
+
+mse = mean_squared_error(target_test, new_data)
 print("Mean Squared Error with Selected Features:", mse)
-print('new_data', new_data[:100])
+print('new_data', new_prices[:100])
 
 # Plot generated price series
 plt.figure(figsize=(10, 5))
-plt.plot(new_data, label='Generated', alpha=0.3)
-plt.plot(target[num_training_days:], label='Real', alpha=0.7)  # Plot real prices
+plt.plot(new_prices, label='Generated', alpha=0.3)
+plt.plot(target_test, label='Real', alpha=0.7)  # Plot real prices
 plt.title("Generated Series vs Real")
 plt.legend()
 plt.show()

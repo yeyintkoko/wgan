@@ -1,4 +1,3 @@
-from sklearn.preprocessing import StandardScaler
+import numpy as np
 
-scaler = StandardScaler()
-data = scaler.fit_transform(data)
+print(np.random.uniform(10, 200, 25))

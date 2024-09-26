@@ -14,18 +14,18 @@ from keras.models import Sequential
 # Load the dataset
 dataset = pd.read_csv("data/output.csv", header=0).dropna()
 dataset = dataset[::-1].reset_index(drop=True)
-data = dataset.iloc[:, 1:].values
-target = dataset.iloc[:, 0].values
+train_data = dataset.iloc[:, 1:].values
+target_data = dataset.iloc[:, 0].values
 
 # Set print options for NumPy
 np.set_printoptions(suppress=True, precision=6)
 
 # Standardize the training data
 scaler = StandardScaler()
-data = scaler.fit_transform(data)
+data = scaler.fit_transform(train_data)
 
 # Split the data into training and test sets
-X_train, X_test, y_train, y_test = train_test_split(data, target, test_size=0.3, random_state=42)
+X_train, X_test, y_train, y_test = train_test_split(data, target_data, test_size=0.3, random_state=42)
 
 # Define the autoencoder architecture
 input_dim = X_train.shape[1]
