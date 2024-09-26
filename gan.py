@@ -13,7 +13,7 @@ np.set_printoptions(suppress=True, precision=6)
 num_training_days = int(target.shape[0] * .7)
 
 # Define sequence length and number of features
-time_step = 50
+time_step = 2
 num_features = weighted_encoded_features_train.shape[1]
 num_samples = len(weighted_encoded_features_train) // time_step
 
@@ -106,16 +106,16 @@ divider = len(batch_sizes) // 2
 batch_size = batch_sizes[divider]
 
 # Train the GAN
-train_gan(epochs=100, batch_size=batch_size)
+train_gan(epochs=150, batch_size=batch_size)
 
 # Generate New Price Series with context
 def generate_new_series_with_context(last_data, num_samples):
     generated_series = []
-    last_data = np.repeat(last_data, time_step - 1)
     num_features_actual = data.shape[1]
 
     for _ in range(num_samples):
-        context = last_data.reshape(1, time_step - 1, num_features)
+        # last_data = np.repeat(last_data, time_step - 1)
+        context = last_data.reshape(1, 1, num_features)
         new_price = gan_model.predict(context)
 
         # Extract the new price
@@ -129,12 +129,11 @@ def generate_new_series_with_context(last_data, num_samples):
         # Inverse transform to get the actual predicted price
         new_price_values = scaler.inverse_transform(new_price_features)
         predicted_price = new_price_values[0, 0]  # Actual price
-        print('predicted', predicted_price)
 
         generated_series.append(predicted_price)
 
         # Update last_data with the new generated price and dynamic features
-        new_features = last_data[1:].copy()  # Get the last features except price
+        new_features = np.random.uniform(low=10.0, high=300.0, size=num_features - 1) #last_data[1:].copy()  # Get the last features except price
         last_data = np.concatenate(([predicted_price], new_features), axis=0)
 
     return np.array(generated_series)
@@ -146,11 +145,12 @@ new_data = generate_new_series_with_context(last_history, generate_num)
 
 mse = mean_squared_error(target[num_training_days:], new_data)
 print("Mean Squared Error with Selected Features:", mse)
+print('new_data', new_data[:100])
 
 # Plot generated price series
 plt.figure(figsize=(10, 5))
 plt.plot(new_data, label='Generated', alpha=0.3)
-# plt.plot(target[num_training_days:], label='Real', alpha=0.7)  # Plot real prices
-# plt.title("Generated Series vs Real")
+plt.plot(target[num_training_days:], label='Real', alpha=0.7)  # Plot real prices
+plt.title("Generated Series vs Real")
 plt.legend()
 plt.show()
