@@ -7,31 +7,29 @@ from keras.layers import LSTM, Dense, Input, Reshape, Conv1D, Flatten, Dropout
 from keras.optimizers import Adam
 from sklearn.metrics import mean_squared_error
 from sklearn.preprocessing import StandardScaler
-from autoencoder import encoded_features_test, encoded_features_train, weighted_encoded_features_train, y_train, y_test, scaler_y, train_data, target_data, autocorrelation
+from autoencoder import encoded_features_test, encoded_features_train, y_train, y_test, scaler_y, num_training_days
 
 np.set_printoptions(suppress=True, precision=6)
 
-num_training_days = int(train_data.shape[0]*.7)
-features_train_data = train_data[:num_training_days] #encoded_features_train
-features_test = train_data[num_training_days:] #encoded_features_test
+features_train = encoded_features_train
+features_test = encoded_features_test
 
-target_train_data = target_data[:num_training_days] #y_train
-target_test = target_data[num_training_days:] #y_test
+target_train = y_train
+target_test = y_test
 
 # Define sequence length and number of features
 time_step = 50
-num_features = features_train_data.shape[1]
-num_features_actual = train_data.shape[1]
-num_samples = len(features_train_data) // time_step
+num_features = features_train.shape[1]
+num_samples = len(features_train) // time_step
 
 # Truncate and reshape the data
-data_train = features_train_data[:num_samples * time_step]
-data_train = data_train.reshape(num_samples, time_step, num_features)
-target_train = target_train_data[:num_samples * time_step]
-target_train = target_train.reshape(num_samples, time_step, 1)
+train_data = features_train[:num_samples * time_step]
+train_data = train_data.reshape(num_samples, time_step, num_features)
+train_target = target_train[:num_samples * time_step]
+train_target = train_target.reshape(num_samples, time_step, 1)
 
-X = data_train[:, :-1, :]
-y = target_train[:, -1, 0]
+X = train_data[:, :-1, :]
+y = train_target[:, -1, 0]
 
 # Define the LSTM Generator
 def build_generator():
@@ -89,18 +87,20 @@ def train_gan(epochs, batch_size):
         
         # Real data
         real_data = y[idx]
-        real_data = real_data.reshape(-1, 1, 1)  # Ensure the shape matches
+        real_data = real_data.reshape(-1, 1, 1)
 
         # Generate synthetic data using the complete feature set
-        generated_data = generator.predict(X[idx])
+        noise = np.random.normal(0, 1, (batch_size, time_step - 1, num_features))
+        fake_data = generator.predict(noise)
         
         # Train Discriminator
         d_loss_real = discriminator.train_on_batch(real_data, np.ones((batch_size, 1)))
-        d_loss_fake = discriminator.train_on_batch(generated_data, np.zeros((batch_size, 1)))
+        d_loss_fake = discriminator.train_on_batch(fake_data, np.zeros((batch_size, 1)))
         d_loss = 0.5 * np.add(d_loss_real, d_loss_fake)
-
+        
         # Train Generator
-        g_loss = gan_model.train_on_batch(X[idx], real_data)
+        noise = np.random.normal(0, 1, (batch_size, time_step - 1, num_features))
+        g_loss = gan_model.train_on_batch(noise, np.ones((batch_size, 1)))
         
         if epoch % 10 == 0:
             print(f"{epoch} [D loss: {d_loss[0]:.4f}] [G loss: {g_loss[0]:.4f}]")
@@ -114,16 +114,18 @@ divider = len(batch_sizes) // 2
 batch_size = batch_sizes[divider]
 
 # Train the GAN
-train_gan(epochs=350, batch_size=batch_size)
+train_gan(epochs=250, batch_size=batch_size)
 
 def normalize(data):
     return (data - np.mean(data)) / np.std(data)
 
+# Autocorrelation
+def autocorrelation(data, lag=1):
+    return [data.iloc[:, i].autocorr(lag) for i in range(data.shape[1])]
+
 def generate_new_feature(last_data):
-    last_data = np.array(last_data)
-    normalized_data = normalize(last_data)
-    autocorr_values = autocorrelation(pd.DataFrame(normalized_data), lag=1)
-    weights = np.array(autocorr_values).flatten()
+    autocorr_values = autocorrelation(pd.DataFrame(last_data), lag=1)
+    weights = np.nan_to_num(autocorr_values) # Replace nan values with zero
     absolute_weights = np.abs(weights)
     weighted_features = last_data * absolute_weights
     return weighted_features
@@ -136,11 +138,8 @@ def generate_new_series_with_context(last_data, generate_num):
         context = last_data.reshape(1, time_step - 1, num_features)
         predicted_value = gan_model.predict(context)
 
-        # Inverse transform to get the actual predicted price
-        predicted_value_origin = scaler_y.inverse_transform(predicted_value)
-
         # Extract the new price
-        predicted_price = predicted_value_origin[0, 0]
+        predicted_price = predicted_value[0, 0]
 
         # Prepare features for the new history
         weighted_last_data = generate_new_feature(last_data)
@@ -156,21 +155,25 @@ def generate_new_series_with_context(last_data, generate_num):
     return np.array(generated_series)
 
 # Generate new price series
-last_sample = data_train[num_samples-1]
+last_sample = train_data[-1]
 last_sample = last_sample[2:]
 last_history = np.concatenate((last_sample, [features_test[0, :]]), axis=0)
 
 generate_num = len(target_test)
 new_data = generate_new_series_with_context(last_history, generate_num)
 
+# Inverse transform to get the actual predicted price
+predict_origin = scaler_y.inverse_transform(new_data.reshape(-1, 1)).flatten()
+test_origin = scaler_y.inverse_transform(target_test).flatten()
+
 mse = mean_squared_error(target_test, new_data)
 print("Mean Squared Error with Selected Features:", mse)
-print('new_data', new_data[:100])
+print('new_data', predict_origin[:100])
 
 # Plot generated price series
 plt.figure(figsize=(10, 5))
-plt.plot(new_data, label='Generated', alpha=0.3)
-plt.plot(target_test, label='Real', alpha=0.7)  # Plot real prices
+plt.plot(predict_origin, label='Generated', alpha=0.3)
+plt.plot(test_origin, label='Real', alpha=0.7)  # Plot real prices
 plt.title("Generated Series vs Real")
 plt.legend()
 plt.show()
