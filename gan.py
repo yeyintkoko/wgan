@@ -1,11 +1,12 @@
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
-from keras import layers
+from keras import layers, regularizers
 from keras.models import Sequential, Model
 from keras.layers import LSTM, Dense, Input, Reshape, Conv1D, Flatten, Dropout
 from keras.optimizers import Adam
 from sklearn.metrics import mean_squared_error
+from sklearn.linear_model import Lasso, Ridge
 from sklearn.preprocessing import StandardScaler
 from autoencoder import encoded_features_test, encoded_features_train, y_train, y_test, scaler_y, num_training_days
 
@@ -36,8 +37,11 @@ def build_generator():
     model = Sequential()
     model.add(Input(shape=(time_step - 1, num_features)))
     model.add(LSTM(400, return_sequences=True))
+    model.add(Dropout(0.2))
     model.add(LSTM(400, return_sequences=True))
+    model.add(Dropout(0.2))
     model.add(LSTM(400))
+    model.add(Dropout(0.2))
     model.add(Dense(1, activation='linear'))
     model.add(Reshape((1, 1)))
     return model
@@ -51,23 +55,23 @@ def build_discriminator():
     model.add(Input(shape=(1, 1)))
 
     # Add the 1D Convolutional layers
-    model.add(layers.Conv1D(32, kernel_size=5, strides=2, padding='same', activation='leaky_relu'))
-    model.add(layers.Conv1D(64, kernel_size=5, strides=2, padding='same', activation='leaky_relu'))
+    model.add(layers.Conv1D(32, kernel_size=5, strides=2, padding='same', activation='leaky_relu', kernel_regularizer=regularizers.l2(0.01)))
+    model.add(layers.Conv1D(64, kernel_size=5, strides=2, padding='same', activation='leaky_relu', kernel_regularizer=regularizers.l1(0.01)))
     model.add(layers.BatchNormalization())
-    model.add(layers.Conv1D(128, kernel_size=5, strides=2, padding='same', activation='leaky_relu'))
+    model.add(layers.Conv1D(128, kernel_size=5, strides=2, padding='same', activation='leaky_relu', kernel_regularizer=regularizers.l1(0.01)))
     model.add(layers.BatchNormalization())
 
     # Add the two Fully Connected layers
     model.add(layers.Flatten())  # Flatten the output before feeding into Dense layers
-    model.add(layers.Dense(220, use_bias=False))
+    model.add(layers.Dense(220, use_bias=False, kernel_regularizer=regularizers.l1(0.01)))
     model.add(layers.BatchNormalization())
     model.add(layers.LeakyReLU(0.01))
-    model.add(layers.Dense(220, use_bias=False, activation='relu'))
+    model.add(layers.Dense(220, use_bias=False, activation='relu', kernel_regularizer=regularizers.l1(0.01)))
     model.add(Dense(1, activation='linear'))  # Binary classification
     return model
 
 discriminator = build_discriminator()
-discriminator.compile(loss='mean_squared_error', optimizer=Adam(0.0002, 0.5), metrics=['accuracy'])
+discriminator.compile(loss='binary_crossentropy', optimizer=Adam(0.0002, 0.5), metrics=['accuracy'])
 
 # Build and compile the GAN
 def build_gan():
@@ -78,7 +82,7 @@ def build_gan():
     return model
 
 gan_model = build_gan()
-gan_model.compile(loss='mean_squared_error', optimizer=Adam(0.0002, 0.5))
+gan_model.compile(loss='binary_crossentropy', optimizer=Adam(0.0002, 0.5))
 
 # Train the GAN
 def train_gan(epochs, batch_size):
@@ -114,7 +118,7 @@ divider = len(batch_sizes) // 2
 batch_size = batch_sizes[divider]
 
 # Train the GAN
-train_gan(epochs=250, batch_size=batch_size)
+train_gan(epochs=150, batch_size=batch_size)
 
 def normalize(data):
     return (data - np.mean(data)) / np.std(data)
@@ -168,7 +172,7 @@ test_origin = scaler_y.inverse_transform(target_test).flatten()
 
 mse = mean_squared_error(target_test, new_data)
 print("Mean Squared Error with Selected Features:", mse)
-print('new_data', predict_origin[:100])
+print('new_data', predict_origin[100:])
 
 # Plot generated price series
 plt.figure(figsize=(10, 5))
