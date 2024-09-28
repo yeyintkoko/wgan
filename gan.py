@@ -1,4 +1,5 @@
 import numpy as np
+import pandas as pd
 import matplotlib.pyplot as plt
 from keras import layers
 from keras.models import Sequential, Model
@@ -6,7 +7,7 @@ from keras.layers import LSTM, Dense, Input, Reshape, Conv1D, Flatten, Dropout
 from keras.optimizers import Adam
 from sklearn.metrics import mean_squared_error
 from sklearn.preprocessing import StandardScaler
-from autoencoder import encoded_features_test, encoded_features_train, weighted_encoded_features_train, y_train, y_test, scaler, train_data, target_data
+from autoencoder import encoded_features_test, encoded_features_train, weighted_encoded_features_train, y_train, y_test, scaler_y, train_data, target_data, autocorrelation
 
 np.set_printoptions(suppress=True, precision=6)
 
@@ -37,6 +38,7 @@ def build_generator():
     model = Sequential()
     model.add(Input(shape=(time_step - 1, num_features)))
     model.add(LSTM(400, return_sequences=True))
+    model.add(LSTM(400, return_sequences=True))
     model.add(LSTM(400))
     model.add(Dense(1, activation='linear'))
     model.add(Reshape((1, 1)))
@@ -63,11 +65,11 @@ def build_discriminator():
     model.add(layers.BatchNormalization())
     model.add(layers.LeakyReLU(0.01))
     model.add(layers.Dense(220, use_bias=False, activation='relu'))
-    model.add(Dense(1, activation='sigmoid'))  # Binary classification
+    model.add(Dense(1, activation='linear'))  # Binary classification
     return model
 
 discriminator = build_discriminator()
-discriminator.compile(loss='binary_crossentropy', optimizer=Adam(0.0002, 0.5), metrics=['accuracy'])
+discriminator.compile(loss='mean_squared_error', optimizer=Adam(0.0002, 0.5), metrics=['accuracy'])
 
 # Build and compile the GAN
 def build_gan():
@@ -78,7 +80,7 @@ def build_gan():
     return model
 
 gan_model = build_gan()
-gan_model.compile(loss='binary_crossentropy', optimizer=Adam(0.0002, 0.5))
+gan_model.compile(loss='mean_squared_error', optimizer=Adam(0.0002, 0.5))
 
 # Train the GAN
 def train_gan(epochs, batch_size):
@@ -109,32 +111,47 @@ def get_divisors(n):
 
 batch_sizes = get_divisors(num_samples)
 divider = len(batch_sizes) // 2
-batch_size = batch_sizes[divider-1]
+batch_size = batch_sizes[divider]
 
 # Train the GAN
 train_gan(epochs=350, batch_size=batch_size)
 
+def normalize(data):
+    return (data - np.mean(data)) / np.std(data)
+
+def generate_new_feature(last_data):
+    last_data = np.array(last_data)
+    normalized_data = normalize(last_data)
+    autocorr_values = autocorrelation(pd.DataFrame(normalized_data), lag=1)
+    weights = np.array(autocorr_values).flatten()
+    absolute_weights = np.abs(weights)
+    weighted_features = last_data * absolute_weights
+    return weighted_features
+
 # Generate New Price Series with context
-def generate_new_series_with_context(last_data, num_samples):
+def generate_new_series_with_context(last_data, generate_num):
     generated_series = []
 
-    for _ in range(num_samples):
+    for _ in range(generate_num):
         context = last_data.reshape(1, time_step - 1, num_features)
         predicted_value = gan_model.predict(context)
 
-        # Extract the new price
-        predicted_price = predicted_value[0, 0]
+        # Inverse transform to get the actual predicted price
+        predicted_value_origin = scaler_y.inverse_transform(predicted_value)
 
-        # Prepare features for inverse scaling
-        new_features = np.zeros((1, num_features))
-        new_features[0, 0] = predicted_price  # Set the predicted price
-        new_features[0, 1:] = np.random.uniform(10, 200, num_features - 1)  # Example random features
+        # Extract the new price
+        predicted_price = predicted_value_origin[0, 0]
+
+        # Prepare features for the new history
+        weighted_last_data = generate_new_feature(last_data)
+        new_features = weighted_last_data[-1]
+        new_features[0] = predicted_price  # Set the predicted price
 
         generated_series.append(predicted_price)
 
         # Update last_data with the new generated price and dynamic features
         last_data = last_data[1:]
-        last_data = np.concatenate((last_data, new_features), axis=0)
+        last_data = np.concatenate((last_data, [new_features]), axis=0)
 
     return np.array(generated_series)
 
@@ -146,19 +163,13 @@ last_history = np.concatenate((last_sample, [features_test[0, :]]), axis=0)
 generate_num = len(target_test)
 new_data = generate_new_series_with_context(last_history, generate_num)
 
-# Inverse transform to get the actual predicted price
-new_prices = []
-for price in new_data:
-    new_features = scaler.inverse_transform(np.repeat(price, num_features_actual).reshape(1, -1))
-    new_prices.append(new_features[0,0])
-
 mse = mean_squared_error(target_test, new_data)
 print("Mean Squared Error with Selected Features:", mse)
-print('new_data', new_prices[:100])
+print('new_data', new_data[:100])
 
 # Plot generated price series
 plt.figure(figsize=(10, 5))
-plt.plot(new_prices, label='Generated', alpha=0.3)
+plt.plot(new_data, label='Generated', alpha=0.3)
 plt.plot(target_test, label='Real', alpha=0.7)  # Plot real prices
 plt.title("Generated Series vs Real")
 plt.legend()

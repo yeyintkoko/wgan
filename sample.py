@@ -279,16 +279,15 @@ def plot_gaussian_error():
 
     plt.show()
 
-
-plot_stock_price(data_FT)
+# plot_stock_price(data_FT)
 # plot_technical_indicators(dataset_TI_df, 400)
 # plot_fourier_transforms(data_FT)
 # plot_wavelets(data_FT)
 # print_arima_model(data_FT)
 # plot_auto_correlation(data_FT)
 # predict_value(data_FT)
-# plot_regression_test(dataset_TI_df)
-# plot_feature_importances(dataset_TI_df)
+# plot_regression_test(dataset_total_df)
+# plot_feature_importances(dataset_total_df)
 # plot_gaussian_error()
 
 #-----------
