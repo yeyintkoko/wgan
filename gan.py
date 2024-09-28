@@ -1,5 +1,6 @@
 import numpy as np
 import pandas as pd
+import tensorflow as tf
 import matplotlib.pyplot as plt
 from keras import layers, regularizers
 from keras.models import Sequential, Model
@@ -47,7 +48,7 @@ def build_generator():
     return model
 
 generator = build_generator()
-generator.compile(loss='mean_squared_error', optimizer=Adam(0.0002, 0.5))
+generator.compile(loss='mean_squared_error', optimizer=Adam(0.0001, 0.5))
 
 # Define the CNN Discriminator
 def build_discriminator():
@@ -57,21 +58,21 @@ def build_discriminator():
     # Add the 1D Convolutional layers
     model.add(layers.Conv1D(32, kernel_size=5, strides=2, padding='same', activation='leaky_relu', kernel_regularizer=regularizers.l2(0.01)))
     model.add(layers.Conv1D(64, kernel_size=5, strides=2, padding='same', activation='leaky_relu', kernel_regularizer=regularizers.l1(0.01)))
-    model.add(layers.BatchNormalization())
+    model.add(layers.BatchNormalization(momentum=0.8))
     model.add(layers.Conv1D(128, kernel_size=5, strides=2, padding='same', activation='leaky_relu', kernel_regularizer=regularizers.l1(0.01)))
-    model.add(layers.BatchNormalization())
+    model.add(layers.BatchNormalization(momentum=0.8))
 
     # Add the two Fully Connected layers
     model.add(layers.Flatten())  # Flatten the output before feeding into Dense layers
     model.add(layers.Dense(220, use_bias=False, kernel_regularizer=regularizers.l1(0.01)))
-    model.add(layers.BatchNormalization())
+    model.add(layers.BatchNormalization(momentum=0.8))
     model.add(layers.LeakyReLU(0.01))
     model.add(layers.Dense(220, use_bias=False, activation='relu', kernel_regularizer=regularizers.l1(0.01)))
     model.add(Dense(1, activation='linear'))  # Binary classification
     return model
 
 discriminator = build_discriminator()
-discriminator.compile(loss='binary_crossentropy', optimizer=Adam(0.0002, 0.5), metrics=['accuracy'])
+discriminator.compile(loss='mean_squared_error', optimizer=Adam(0.0001, 0.5), metrics=['accuracy'])
 
 # Build and compile the GAN
 def build_gan():
@@ -82,7 +83,26 @@ def build_gan():
     return model
 
 gan_model = build_gan()
-gan_model.compile(loss='binary_crossentropy', optimizer=Adam(0.0002, 0.5))
+gan_model.compile(loss='mean_squared_error', optimizer=Adam(0.0001, 0.5))
+
+# Gradient penalty function
+def gradient_penalty(real_data, fake_data):
+    # Convert to TensorFlow tensors and ensure they are of the same type
+    real_data = tf.convert_to_tensor(real_data, dtype=tf.float32)
+    fake_data = tf.convert_to_tensor(fake_data, dtype=tf.float32)
+
+    # Randomly interpolate between real and fake data
+    alpha = tf.random.uniform(shape=(real_data.shape[0], 1, 1), minval=0.0, maxval=1.0)
+    interpolated = alpha * real_data + (1 - alpha) * fake_data
+    
+    with tf.GradientTape() as tape:
+        tape.watch(interpolated)
+        # Get the discriminator output for interpolated data
+        d_interpolated = discriminator(interpolated)
+    
+    gradients = tape.gradient(d_interpolated, interpolated)
+    gp = tf.reduce_mean((tf.norm(gradients, axis=1) - 1.0) ** 2)
+    return gp
 
 # Train the GAN
 def train_gan(epochs, batch_size):
@@ -97,10 +117,13 @@ def train_gan(epochs, batch_size):
         noise = np.random.normal(0, 1, (batch_size, time_step - 1, num_features))
         fake_data = generator.predict(noise)
         
+        # Calculate gradient penalty
+        gp = gradient_penalty(real_data, fake_data)
+        
         # Train Discriminator
         d_loss_real = discriminator.train_on_batch(real_data, np.ones((batch_size, 1)))
         d_loss_fake = discriminator.train_on_batch(fake_data, np.zeros((batch_size, 1)))
-        d_loss = 0.5 * np.add(d_loss_real, d_loss_fake)
+        d_loss = 0.5 * np.add(d_loss_real, d_loss_fake) + 10 * gp  # Adding GP to the loss
         
         # Train Generator
         noise = np.random.normal(0, 1, (batch_size, time_step - 1, num_features))
@@ -108,7 +131,6 @@ def train_gan(epochs, batch_size):
         
         if epoch % 10 == 0:
             print(f"{epoch} [D loss: {d_loss[0]:.4f}] [G loss: {g_loss[0]:.4f}]")
-        
 
 def get_divisors(n):
     return [i for i in range(1, n + 1) if n % i == 0]
@@ -118,7 +140,7 @@ divider = len(batch_sizes) // 2
 batch_size = batch_sizes[divider]
 
 # Train the GAN
-train_gan(epochs=150, batch_size=batch_size)
+train_gan(epochs=250, batch_size=batch_size)
 
 def normalize(data):
     return (data - np.mean(data)) / np.std(data)
