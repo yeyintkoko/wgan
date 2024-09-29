@@ -9,7 +9,7 @@ from keras.optimizers import Adam
 from sklearn.metrics import mean_squared_error
 from sklearn.linear_model import Lasso, Ridge
 from sklearn.preprocessing import StandardScaler
-from autoencoder import encoded_features_test, encoded_features_train, y_train, y_test, scaler_y, num_training_days
+from autoencoder import encoded_features_test, encoded_features_train, y_train, y_test, scaler_y, scaler_X, num_training_days
 
 np.set_printoptions(suppress=True, precision=6)
 
@@ -140,7 +140,7 @@ divider = len(batch_sizes) // 2
 batch_size = batch_sizes[divider]
 
 # Train the GAN
-train_gan(epochs=1250, batch_size=batch_size)
+train_gan(epochs=50, batch_size=batch_size)
 
 def normalize(data):
     return (data - np.mean(data)) / np.std(data)
@@ -151,9 +151,9 @@ def autocorrelation(data, lag=1):
 
 def generate_new_feature(last_data):
     autocorr_values = autocorrelation(pd.DataFrame(last_data), lag=1)
-    weights = np.nan_to_num(autocorr_values) # Replace nan values with zero
-    absolute_weights = np.abs(weights)
-    weighted_features = last_data * absolute_weights
+    weights = np.nan_to_num(autocorr_values, nan=0) # Replace nan values with 0
+    # absolute_weights = np.abs(weights)
+    weighted_features = last_data * weights
     return weighted_features
 
 # Generate New Price Series with context
@@ -168,8 +168,11 @@ def generate_new_series_with_context(last_data, generate_num):
         predicted_price = predicted_value[0, 0]
 
         # Prepare features for the new history
-        weighted_last_data = generate_new_feature(last_data)
-        new_features = weighted_last_data[-1]
+        # weighted_last_data = generate_new_feature(last_data)
+        # new_features = weighted_last_data[-1]
+        noise = np.random.uniform(10, 300, num_features)
+        new_features = scaler_X.fit_transform(noise.reshape(-1, 1)).flatten()
+
         new_features[0] = predicted_price  # Set the predicted price
 
         generated_series.append(predicted_price)

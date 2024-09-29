@@ -11,7 +11,7 @@ import keras
 def load_data():
     # Load the dataset
     dataset = pd.read_csv("data/output.csv", header=0).dropna()
-    dataset = dataset[['price', 'ma7', '26ema', '12ema', 'ema', 'momentum']]
+    dataset = dataset[['price', 'ma7', '26ema', '12ema', 'upper_band', 'lower_band', 'ema', 'momentum']]
     dataset = dataset[::-1].reset_index(drop=True)
 
     # Check for NaNs in the original dataset

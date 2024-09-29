@@ -281,10 +281,10 @@ def plot_gaussian_error():
 # plot_fourier_transforms(data_FT)
 # plot_wavelets(data_FT)
 # print_arima_model(data_FT)
-plot_auto_correlation(dataset_total_df)
+# plot_auto_correlation(dataset_total_df)
 # predict_value(data_FT)
 # plot_regression_test(dataset_total_df)
-# plot_feature_importances(dataset_total_df)
+plot_feature_importances(dataset_total_df)
 # plot_gaussian_error()
 
 #-----------
