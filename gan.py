@@ -140,7 +140,7 @@ divider = len(batch_sizes) // 2
 batch_size = batch_sizes[divider]
 
 # Train the GAN
-train_gan(epochs=50, batch_size=batch_size)
+train_gan(epochs=350, batch_size=batch_size)
 
 def generate_new_feature(last_data, new_value):
     old_value = last_data[-1,0]
@@ -164,9 +164,9 @@ def generate_new_series_with_context(last_data, generate_num):
 
         # Prepare features for the new history
         new_features = generate_new_feature(last_data, predicted_price)
-
+        
         # noise = np.random.uniform(10, 300, num_features)
-        # new_features = scaler_X.transform(noise.reshape(-1, 1)).flatten()
+        # new_features = scaler_X.transform(noise.reshape(1, -1)).flatten()
 
         new_features[0] = predicted_price  # Set the predicted price
 
@@ -192,12 +192,12 @@ test_origin = scaler_y.inverse_transform(target_test).flatten()
 
 mse = mean_squared_error(target_test, new_data)
 print("Mean Squared Error with Selected Features:", mse)
-# print('new_data', predict_origin[100:])
+print('new_data', predict_origin[100:])
 
 # Plot generated price series
 plt.figure(figsize=(10, 5))
-plt.plot(new_data, label='Generated', alpha=0.3)
-plt.plot(target_test, label='Real', alpha=0.7)  # Plot real prices
+plt.plot(predict_origin, label='Generated', alpha=0.3)
+plt.plot(test_origin, label='Real', alpha=0.7)  # Plot real prices
 plt.title("Generated Series vs Real")
 plt.legend()
 plt.show()
