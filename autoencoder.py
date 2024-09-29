@@ -11,7 +11,7 @@ import keras
 def load_data():
     # Load the dataset
     dataset = pd.read_csv("data/output.csv", header=0).dropna()
-    dataset = dataset[['price', 'ma7', '26ema', '12ema', 'MACD', 'ema', 'momentum']]
+    dataset = dataset[['price', 'ma7', '26ema', '12ema', 'ema', 'momentum']]
     dataset = dataset[::-1].reset_index(drop=True)
 
     # Check for NaNs in the original dataset
@@ -27,9 +27,9 @@ def load_data():
     data_test = dataset.iloc[num_training_days:].values
 
     # Split the data into training and test sets
-    X_train = data_train[:,1:]  # all features expect the first one (price)
+    X_train = data_train[:,:]  # all features expect the first one (price)
     y_train = data_train[:,0]   # only the first one (price)
-    X_test = data_test[:,1:]
+    X_test = data_test[:,:]
     y_test = data_test[:,0]
     
     # Standardize the input features

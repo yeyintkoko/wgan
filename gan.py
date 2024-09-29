@@ -115,7 +115,7 @@ def train_gan(epochs, batch_size):
 
         # Generate synthetic data using the complete feature set
         noise = np.random.normal(0, 1, (batch_size, time_step - 1, num_features))
-        fake_data = generator.predict(noise)
+        fake_data = generator.predict(X[idx])
         
         # Calculate gradient penalty
         gp = gradient_penalty(real_data, fake_data)
@@ -127,7 +127,7 @@ def train_gan(epochs, batch_size):
         
         # Train Generator
         noise = np.random.normal(0, 1, (batch_size, time_step - 1, num_features))
-        g_loss = gan_model.train_on_batch(noise, np.ones((batch_size, 1)))
+        g_loss = gan_model.train_on_batch(X[idx], real_data)
         
         if epoch % 10 == 0:
             print(f"{epoch} [D loss: {d_loss[0]:.4f}] [G loss: {g_loss[0]:.4f}]")
@@ -140,7 +140,7 @@ divider = len(batch_sizes) // 2
 batch_size = batch_sizes[divider]
 
 # Train the GAN
-train_gan(epochs=250, batch_size=batch_size)
+train_gan(epochs=1250, batch_size=batch_size)
 
 def normalize(data):
     return (data - np.mean(data)) / np.std(data)
@@ -194,7 +194,7 @@ test_origin = scaler_y.inverse_transform(target_test).flatten()
 
 mse = mean_squared_error(target_test, new_data)
 print("Mean Squared Error with Selected Features:", mse)
-print('new_data', predict_origin[100:])
+# print('new_data', predict_origin[100:])
 
 # Plot generated price series
 plt.figure(figsize=(10, 5))
