@@ -2,7 +2,7 @@ import numpy as np
 import pandas as pd
 import tensorflow as tf
 import matplotlib.pyplot as plt
-from keras import layers, regularizers
+from keras import layers
 from keras.models import Sequential, Model
 from keras.layers import LSTM, Dense, Input, Reshape, Conv1D, Flatten, Dropout
 from keras.optimizers import Adam
@@ -20,7 +20,7 @@ target_train = y_train
 target_test = y_test
 
 # Define sequence length and number of features
-time_step = 10
+time_step = 50
 num_features = features_train.shape[1]
 num_samples = len(features_train) // time_step
 
@@ -56,18 +56,18 @@ def build_discriminator():
     model.add(Input(shape=(1, 1)))
 
     # Add the 1D Convolutional layers
-    model.add(layers.Conv1D(32, kernel_size=5, strides=2, padding='same', activation='leaky_relu', kernel_regularizer=regularizers.l2(0.01)))
-    model.add(layers.Conv1D(64, kernel_size=5, strides=2, padding='same', activation='leaky_relu', kernel_regularizer=regularizers.l1(0.01)))
+    model.add(layers.Conv1D(32, kernel_size=5, strides=2, padding='same', activation='leaky_relu'))
+    model.add(layers.Conv1D(64, kernel_size=5, strides=2, padding='same', activation='leaky_relu'))
     model.add(layers.BatchNormalization(momentum=0.8))
-    model.add(layers.Conv1D(128, kernel_size=5, strides=2, padding='same', activation='leaky_relu', kernel_regularizer=regularizers.l1(0.01)))
+    model.add(layers.Conv1D(128, kernel_size=5, strides=2, padding='same', activation='leaky_relu'))
     model.add(layers.BatchNormalization(momentum=0.8))
 
     # Add the two Fully Connected layers
     model.add(layers.Flatten())  # Flatten the output before feeding into Dense layers
-    model.add(layers.Dense(220, use_bias=False, kernel_regularizer=regularizers.l1(0.01)))
+    model.add(layers.Dense(220, use_bias=False))
     model.add(layers.BatchNormalization(momentum=0.8))
     model.add(layers.LeakyReLU(0.01))
-    model.add(layers.Dense(220, use_bias=False, activation='relu', kernel_regularizer=regularizers.l1(0.01)))
+    model.add(layers.Dense(220, use_bias=False, activation='relu'))
     model.add(Dense(1, activation='linear'))  # Binary classification
     return model
 
@@ -140,24 +140,23 @@ divider = len(batch_sizes) // 2
 batch_size = batch_sizes[divider]
 
 # Train the GAN
-train_gan(epochs=10, batch_size=batch_size)
+train_gan(epochs=50, batch_size=batch_size)
 
 def normalize(data):
     return (data - np.mean(data)) / np.std(data)
 
 # Autocorrelation
 def autocorrelation(data, lag=1):
-    return [data.iloc[:, i].autocorr(lag) for i in range(data.shape[1])]
+    # Drop any columns that contain NaN values
+    data_cleaned = data.dropna(axis=1)
+    return [data_cleaned.iloc[:, i].autocorr(lag) for i in range(data_cleaned.shape[1])]
 
 def generate_new_feature(last_data):
-    print('-------- last_data ---------', last_data)
     autocorr_values = autocorrelation(pd.DataFrame(last_data), lag=1)
-    print('-------- autocorr_values ---------', autocorr_values)
     weights = np.nan_to_num(autocorr_values, nan=0) # Replace nan values with 0
-    print('-------- weights ---------', weights)
     # absolute_weights = np.abs(weights)
-    weighted_features = last_data * weights
-    print('-------- weighted_features ---------', weighted_features)
+    weight_amount = last_data * weights
+    weighted_features = last_data + weight_amount
     return weighted_features
 
 # Generate New Price Series with context
@@ -172,14 +171,14 @@ def generate_new_series_with_context(last_data, generate_num):
         predicted_price = predicted_value[0, 0]
 
         # Prepare features for the new history
-        weighted_last_data = generate_new_feature(last_data)
-        new_features = weighted_last_data[-1]
+        # weighted_last_data = generate_new_feature(last_data)
+        # new_features = weighted_last_data[-1]
 
-        # noise = np.random.uniform(10, 300, num_features)
-        # new_features = scaler_X.fit_transform(noise.reshape(-1, 1)).flatten()
+        noise = np.random.uniform(10, 300, num_features)
+        new_features = scaler_X.fit_transform(noise.reshape(-1, 1)).flatten()
+        # new_features = last_data[-1]
 
         new_features[0] = predicted_price  # Set the predicted price
-        print('----------- new_features --------', new_features)
 
         generated_series.append(predicted_price)
 
@@ -194,7 +193,6 @@ last_sample = train_data[-1]
 last_sample = last_sample[2:]
 last_history = np.concatenate((last_sample, [features_test[0, :]]), axis=0)
 
-print('------------ last_history -------------', last_history)
 generate_num = len(target_test)
 new_data = generate_new_series_with_context(last_history, generate_num)
 
@@ -208,8 +206,8 @@ print("Mean Squared Error with Selected Features:", mse)
 
 # Plot generated price series
 plt.figure(figsize=(10, 5))
-plt.plot(features_test.reshape(-1, num_features), label='Generated', alpha=0.3)
-# plt.plot(test_origin, label='Real', alpha=0.7)  # Plot real prices
+plt.plot(new_data, label='Generated', alpha=0.3)
+plt.plot(target_test, label='Real', alpha=0.7)  # Plot real prices
 plt.title("Generated Series vs Real")
 plt.legend()
 plt.show()

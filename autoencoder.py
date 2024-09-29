@@ -47,11 +47,11 @@ def load_data():
 
 def build_stacked_autoencoder(input_shape):
     input_layer = layers.Input(shape=input_shape)
-    encoded = layers.Dense(64, activation='relu')(input_layer)  # Changed to relu
-    encoded = layers.Dense(input_shape[0], activation='relu')(encoded)
+    encoded = layers.Dense(64, activation='gelu')(input_layer)
+    encoded = layers.Dense(input_shape[0], activation='gelu')(encoded)
     
     decoded = layers.Dense(64, activation='relu')(encoded)
-    decoded = layers.Dense(input_shape[0], activation='linear')(decoded)  # Changed to linear
+    decoded = layers.Dense(input_shape[0], activation='linear')(decoded)
     
     autoencoder = models.Model(input_layer, decoded)
     encoder = models.Model(input_layer, encoded)
@@ -72,8 +72,6 @@ autoencoder.fit(X_train, X_train, epochs=400, batch_size=8, shuffle=True, valida
 # Use encoder part of the autoencoder for feature selection
 encoded_features_train = encoder.predict(X_train)
 encoded_features_test = encoder.predict(X_test)
-
-print('------------- encoded_features_train ---------', encoded_features_train)
 
 # Perform regression using Linear Regression
 def perform_regression_test():
@@ -104,5 +102,5 @@ def plot_result(predicted_data, real_data):
     plt.legend()
     plt.show()
 
-(y_test_original, y_pred_original), y_pred = perform_regression_test()
-plot_result(y_pred_original, y_test_original)
+# (y_test_original, y_pred_original), y_pred = perform_regression_test()
+# plot_result(y_pred_original, y_test_original)
