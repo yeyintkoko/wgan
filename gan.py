@@ -142,22 +142,14 @@ batch_size = batch_sizes[divider]
 # Train the GAN
 train_gan(epochs=50, batch_size=batch_size)
 
-def normalize(data):
-    return (data - np.mean(data)) / np.std(data)
-
-# Autocorrelation
-def autocorrelation(data, lag=1):
-    # Drop any columns that contain NaN values
-    data_cleaned = data.dropna(axis=1)
-    return [data_cleaned.iloc[:, i].autocorr(lag) for i in range(data_cleaned.shape[1])]
-
-def generate_new_feature(last_data):
-    autocorr_values = autocorrelation(pd.DataFrame(last_data), lag=1)
-    weights = np.nan_to_num(autocorr_values, nan=0) # Replace nan values with 0
-    # absolute_weights = np.abs(weights)
-    weight_amount = last_data * weights
-    weighted_features = last_data + weight_amount
-    return weighted_features
+def generate_new_feature(last_data, new_value):
+    old_value = last_data[-1,0]
+    old_features = last_data[-1]
+    change_rate = ((new_value - old_value) / old_value)
+    change_amounts = old_features * change_rate
+    weighted_features = old_features + change_amounts
+    weighted_features_scaled = scaler_X.transform(weighted_features.reshape(1, -1)).flatten()
+    return weighted_features_scaled
 
 # Generate New Price Series with context
 def generate_new_series_with_context(last_data, generate_num):
@@ -171,12 +163,10 @@ def generate_new_series_with_context(last_data, generate_num):
         predicted_price = predicted_value[0, 0]
 
         # Prepare features for the new history
-        # weighted_last_data = generate_new_feature(last_data)
-        # new_features = weighted_last_data[-1]
+        new_features = generate_new_feature(last_data, predicted_price)
 
-        noise = np.random.uniform(10, 300, num_features)
-        new_features = scaler_X.fit_transform(noise.reshape(-1, 1)).flatten()
-        # new_features = last_data[-1]
+        # noise = np.random.uniform(10, 300, num_features)
+        # new_features = scaler_X.transform(noise.reshape(-1, 1)).flatten()
 
         new_features[0] = predicted_price  # Set the predicted price
 

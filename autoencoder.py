@@ -26,9 +26,9 @@ def load_data():
     data_test = dataset.iloc[num_training_days:].values
 
     # Split the data into training and test sets
-    X_train = data_train[:, 1:]  # all features except the first one (price)
+    X_train = data_train[:, :]  # all features except the first one (price)
     y_train = data_train[:, 0]    # only the first one (price)
-    X_test = data_test[:, 1:]      # all features except the first one
+    X_test = data_test[:, :]      # all features except the first one
     y_test = data_test[:, 0]       # only the first one (price)
     
     # Standardize the input features
@@ -72,6 +72,12 @@ autoencoder.fit(X_train, X_train, epochs=400, batch_size=8, shuffle=True, valida
 # Use encoder part of the autoencoder for feature selection
 encoded_features_train = encoder.predict(X_train)
 encoded_features_test = encoder.predict(X_test)
+
+# Autocorrelation
+def autocorrelation(data, lag=1):
+    # Drop any columns that contain NaN values
+    data_cleaned = data.dropna(axis=1)
+    return [data_cleaned.iloc[:, i].autocorr(lag) for i in range(data_cleaned.shape[1])]
 
 # Perform regression using Linear Regression
 def perform_regression_test():
