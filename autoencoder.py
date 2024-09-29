@@ -2,11 +2,10 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 from sklearn.preprocessing import StandardScaler
-from sklearn.model_selection import train_test_split
 from sklearn.linear_model import LinearRegression
 from sklearn.metrics import mean_squared_error
 from tensorflow.keras import layers, models
-import keras
+from keras.optimizers import Adam
 
 def load_data():
     # Load the dataset
@@ -27,37 +26,37 @@ def load_data():
     data_test = dataset.iloc[num_training_days:].values
 
     # Split the data into training and test sets
-    X_train = data_train[:,:]  # all features expect the first one (price)
-    y_train = data_train[:,0]   # only the first one (price)
-    X_test = data_test[:,:]
-    y_test = data_test[:,0]
+    X_train = data_train[:, 1:]  # all features except the first one (price)
+    y_train = data_train[:, 0]    # only the first one (price)
+    X_test = data_test[:, 1:]      # all features except the first one
+    y_test = data_test[:, 0]       # only the first one (price)
     
     # Standardize the input features
     scaler_X = StandardScaler()
     X_train = scaler_X.fit_transform(X_train)
-    X_test = scaler_X.fit_transform(X_test)
+    X_test = scaler_X.transform(X_test)  # Use transform, not fit_transform
 
     # Standardize the target variable
     scaler_y = StandardScaler()
     y_train_reshaped = y_train.reshape(-1, 1)  # Reshape for scaler
     y_test_reshaped = y_test.reshape(-1, 1)  # Reshape for scaler
     y_train = scaler_y.fit_transform(y_train_reshaped)
-    y_test = scaler_y.fit_transform(y_test_reshaped)
+    y_test = scaler_y.transform(y_test_reshaped)  # Use transform, not fit_transform
 
     return (X_train, y_train), (X_test, y_test), (scaler_X, scaler_y), num_training_days
 
 def build_stacked_autoencoder(input_shape):
     input_layer = layers.Input(shape=input_shape)
-    encoded = layers.Dense(64, activation='gelu')(input_layer)
+    encoded = layers.Dense(64, activation='relu')(input_layer)  # Changed to relu
     encoded = layers.Dense(input_shape[0], activation='relu')(encoded)
     
     decoded = layers.Dense(64, activation='relu')(encoded)
-    decoded = layers.Dense(input_shape[0], activation='sigmoid')(decoded)
+    decoded = layers.Dense(input_shape[0], activation='linear')(decoded)  # Changed to linear
     
     autoencoder = models.Model(input_layer, decoded)
     encoder = models.Model(input_layer, encoded)
     
-    autoencoder.compile(optimizer='adam', loss='mse')
+    autoencoder.compile(optimizer=Adam(learning_rate=0.0001), loss='mse')
     return autoencoder, encoder
 
 (X_train, y_train), (X_test, y_test), (scaler_X, scaler_y), num_training_days = load_data()
@@ -68,11 +67,13 @@ num_features = X_train.shape[1]
 autoencoder, encoder = build_stacked_autoencoder((num_features,))
 
 # Train the autoencoder
-autoencoder.fit(X_train, X_train, epochs=100, batch_size=32, shuffle=True, validation_data=(X_test, X_test))
+autoencoder.fit(X_train, X_train, epochs=400, batch_size=8, shuffle=True, validation_data=(X_test, X_test))
 
 # Use encoder part of the autoencoder for feature selection
 encoded_features_train = encoder.predict(X_train)
 encoded_features_test = encoder.predict(X_test)
+
+print('------------- encoded_features_train ---------', encoded_features_train)
 
 # Perform regression using Linear Regression
 def perform_regression_test():
@@ -103,5 +104,5 @@ def plot_result(predicted_data, real_data):
     plt.legend()
     plt.show()
 
-# (y_test_original, y_pred_original), y_pred = perform_regression_test()
-# plot_result(y_pred_original, y_test_original)
+(y_test_original, y_pred_original), y_pred = perform_regression_test()
+plot_result(y_pred_original, y_test_original)

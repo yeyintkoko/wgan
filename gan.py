@@ -11,7 +11,7 @@ from sklearn.linear_model import Lasso, Ridge
 from sklearn.preprocessing import StandardScaler
 from autoencoder import encoded_features_test, encoded_features_train, y_train, y_test, scaler_y, scaler_X, num_training_days
 
-np.set_printoptions(suppress=True, precision=6)
+# np.set_printoptions(suppress=True, precision=6)
 
 features_train = encoded_features_train
 features_test = encoded_features_test
@@ -20,7 +20,7 @@ target_train = y_train
 target_test = y_test
 
 # Define sequence length and number of features
-time_step = 50
+time_step = 10
 num_features = features_train.shape[1]
 num_samples = len(features_train) // time_step
 
@@ -140,7 +140,7 @@ divider = len(batch_sizes) // 2
 batch_size = batch_sizes[divider]
 
 # Train the GAN
-train_gan(epochs=50, batch_size=batch_size)
+train_gan(epochs=10, batch_size=batch_size)
 
 def normalize(data):
     return (data - np.mean(data)) / np.std(data)
@@ -150,10 +150,14 @@ def autocorrelation(data, lag=1):
     return [data.iloc[:, i].autocorr(lag) for i in range(data.shape[1])]
 
 def generate_new_feature(last_data):
+    print('-------- last_data ---------', last_data)
     autocorr_values = autocorrelation(pd.DataFrame(last_data), lag=1)
+    print('-------- autocorr_values ---------', autocorr_values)
     weights = np.nan_to_num(autocorr_values, nan=0) # Replace nan values with 0
+    print('-------- weights ---------', weights)
     # absolute_weights = np.abs(weights)
     weighted_features = last_data * weights
+    print('-------- weighted_features ---------', weighted_features)
     return weighted_features
 
 # Generate New Price Series with context
@@ -168,12 +172,14 @@ def generate_new_series_with_context(last_data, generate_num):
         predicted_price = predicted_value[0, 0]
 
         # Prepare features for the new history
-        # weighted_last_data = generate_new_feature(last_data)
-        # new_features = weighted_last_data[-1]
-        noise = np.random.uniform(10, 300, num_features)
-        new_features = scaler_X.fit_transform(noise.reshape(-1, 1)).flatten()
+        weighted_last_data = generate_new_feature(last_data)
+        new_features = weighted_last_data[-1]
+
+        # noise = np.random.uniform(10, 300, num_features)
+        # new_features = scaler_X.fit_transform(noise.reshape(-1, 1)).flatten()
 
         new_features[0] = predicted_price  # Set the predicted price
+        print('----------- new_features --------', new_features)
 
         generated_series.append(predicted_price)
 
@@ -188,6 +194,7 @@ last_sample = train_data[-1]
 last_sample = last_sample[2:]
 last_history = np.concatenate((last_sample, [features_test[0, :]]), axis=0)
 
+print('------------ last_history -------------', last_history)
 generate_num = len(target_test)
 new_data = generate_new_series_with_context(last_history, generate_num)
 
@@ -201,8 +208,8 @@ print("Mean Squared Error with Selected Features:", mse)
 
 # Plot generated price series
 plt.figure(figsize=(10, 5))
-plt.plot(predict_origin, label='Generated', alpha=0.3)
-plt.plot(test_origin, label='Real', alpha=0.7)  # Plot real prices
+plt.plot(features_test.reshape(-1, num_features), label='Generated', alpha=0.3)
+# plt.plot(test_origin, label='Real', alpha=0.7)  # Plot real prices
 plt.title("Generated Series vs Real")
 plt.legend()
 plt.show()
