@@ -108,5 +108,5 @@ def plot_result(predicted_data, real_data):
     plt.legend()
     plt.show()
 
-# (y_test_original, y_pred_original), y_pred = perform_regression_test()
-# plot_result(y_pred_original, y_test_original)
+(y_test_original, y_pred_original), y_pred = perform_regression_test()
+plot_result(y_pred_original, y_test_original)

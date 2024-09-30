@@ -11,7 +11,7 @@ from sklearn.linear_model import Lasso, Ridge
 from sklearn.preprocessing import StandardScaler
 from autoencoder import encoded_features_test, encoded_features_train, y_train, y_test, scaler_y, scaler_X, num_training_days
 
-# np.set_printoptions(suppress=True, precision=6)
+np.set_printoptions(suppress=True, precision=6)
 
 features_train = encoded_features_train
 features_test = encoded_features_test
@@ -22,21 +22,35 @@ target_test = y_test
 # Define sequence length and number of features
 time_step = 50
 num_features = features_train.shape[1]
-num_samples = len(features_train) // time_step
+num_samples = len(features_train) - time_step
+
+samples = features_train[time_step:]
+targets = target_train[time_step:]
 
 # Truncate and reshape the data
-train_data = features_train[:num_samples * time_step]
-train_data = train_data.reshape(num_samples, time_step, num_features)
-train_target = target_train[:num_samples * time_step]
-train_target = train_target.reshape(num_samples, time_step, 1)
+last_sample = features_train[:time_step]
+train_data = []
+train_target = []
+for i in range(num_samples):
+    current_target = targets[i]
+    current_train = samples[i]
+    
+    train_data.append(last_sample)
+    train_target.append(current_target)
+    
+    last_sample = last_sample[1:]
+    last_sample = np.concatenate((last_sample, [current_train]))
 
-X = train_data[:, :-1, :]
-y = train_target[:, -1, 0]
+train_data = np.array(train_data)
+train_target = np.array(train_target)
+
+X = train_data
+y = train_target
 
 # Define the LSTM Generator
 def build_generator():
     model = Sequential()
-    model.add(Input(shape=(time_step - 1, num_features)))
+    model.add(Input(shape=(time_step, num_features)))
     model.add(LSTM(400, return_sequences=True))
     model.add(Dropout(0.2))
     model.add(LSTM(400, return_sequences=True))
@@ -76,7 +90,7 @@ discriminator.compile(loss='mean_squared_error', optimizer=Adam(0.0001, 0.5), me
 
 # Build and compile the GAN
 def build_gan():
-    gan_input = Input(shape=(time_step - 1, num_features))
+    gan_input = Input(shape=(time_step, num_features))
     generated_data = generator(gan_input)
     gan_output = discriminator(generated_data)
     model = Model(gan_input, gan_output)
@@ -114,7 +128,7 @@ def train_gan(epochs, batch_size):
         real_data = real_data.reshape(-1, 1, 1)
 
         # Generate synthetic data using the complete feature set
-        noise = np.random.normal(0, 1, (batch_size, time_step - 1, num_features))
+        noise = np.random.normal(0, 1, (batch_size, time_step, num_features))
         fake_data = generator.predict(X[idx])
         
         # Calculate gradient penalty
@@ -126,7 +140,7 @@ def train_gan(epochs, batch_size):
         d_loss = 0.5 * np.add(d_loss_real, d_loss_fake) + 10 * gp  # Adding GP to the loss
         
         # Train Generator
-        noise = np.random.normal(0, 1, (batch_size, time_step - 1, num_features))
+        noise = np.random.normal(0, 1, (batch_size, time_step, num_features))
         g_loss = gan_model.train_on_batch(X[idx], real_data)
         
         if epoch % 10 == 0:
@@ -140,7 +154,7 @@ divider = len(batch_sizes) // 2
 batch_size = batch_sizes[divider]
 
 # Train the GAN
-train_gan(epochs=350, batch_size=batch_size)
+train_gan(epochs=150, batch_size=batch_size)
 
 def generate_new_feature(last_data, new_value):
     old_value = last_data[-1,0]
@@ -156,7 +170,7 @@ def generate_new_series_with_context(last_data, generate_num):
     generated_series = []
 
     for _ in range(generate_num):
-        context = last_data.reshape(1, time_step - 1, num_features)
+        context = last_data.reshape(1, time_step, num_features)
         predicted_value = gan_model.predict(context)
 
         # Extract the new price
@@ -180,11 +194,21 @@ def generate_new_series_with_context(last_data, generate_num):
 
 # Generate new price series
 last_sample = train_data[-1]
-last_sample = last_sample[2:]
+last_sample = last_sample[1:]
 last_history = np.concatenate((last_sample, [features_test[0, :]]), axis=0)
 
-generate_num = len(target_test)
-new_data = generate_new_series_with_context(last_history, generate_num)
+# generate_num = len(target_test)
+# new_data = generate_new_series_with_context(last_history, generate_num)
+
+last_sample_2 = train_data[-1]
+features_test_data = []
+for i in range(len(features_test)):
+    last_sample_2 = last_sample_2[1:].copy()
+    last_sample_2 = np.concatenate((last_sample_2, [features_test[i, :]]), axis=0)
+    features_test_data.append(last_sample_2)
+
+features_test_data = np.array(features_test_data)
+new_data = gan_model.predict(features_test_data)
 
 # Inverse transform to get the actual predicted price
 predict_origin = scaler_y.inverse_transform(new_data.reshape(-1, 1)).flatten()
@@ -192,7 +216,7 @@ test_origin = scaler_y.inverse_transform(target_test).flatten()
 
 mse = mean_squared_error(target_test, new_data)
 print("Mean Squared Error with Selected Features:", mse)
-print('new_data', predict_origin[100:])
+# print('new_data', predict_origin[100:])
 
 # Plot generated price series
 plt.figure(figsize=(10, 5))
