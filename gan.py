@@ -4,14 +4,14 @@ import tensorflow as tf
 import matplotlib.pyplot as plt
 from keras import layers
 from keras.models import Sequential, Model
-from keras.layers import LSTM, Dense, Input, Reshape, Conv1D, Flatten, Dropout
+from keras.layers import LSTM, Dense, Input, Reshape, Conv1D, Flatten, Dropout, GRU
 from keras.optimizers import Adam
 from sklearn.metrics import mean_squared_error
 from sklearn.linear_model import Lasso, Ridge
 from sklearn.preprocessing import StandardScaler
 from autoencoder import encoded_features_test, encoded_features_train, y_train, y_test, scaler_y, scaler_X, num_training_days
 
-np.set_printoptions(suppress=True, precision=6)
+# np.set_printoptions(suppress=True, precision=6)
 
 features_train = encoded_features_train
 features_test = encoded_features_test
@@ -47,15 +47,15 @@ train_target = np.array(train_target)
 X = train_data
 y = train_target
 
-# Define the LSTM Generator
+# Define the LSTM/GRU Generator
 def build_generator():
     model = Sequential()
     model.add(Input(shape=(time_step, num_features)))
-    model.add(LSTM(400, return_sequences=True))
+    model.add(GRU(400, return_sequences=True))
     model.add(Dropout(0.2))
-    model.add(LSTM(400, return_sequences=True))
+    model.add(GRU(400, return_sequences=True))
     model.add(Dropout(0.2))
-    model.add(LSTM(400))
+    model.add(GRU(400))
     model.add(Dropout(0.2))
     model.add(Dense(1, activation='linear'))
     model.add(Reshape((1, 1)))
@@ -137,7 +137,7 @@ def train_gan(epochs, batch_size):
         # Train Discriminator
         d_loss_real = discriminator.train_on_batch(real_data, np.ones((batch_size, 1)))
         d_loss_fake = discriminator.train_on_batch(fake_data, np.zeros((batch_size, 1)))
-        d_loss = 0.5 * np.add(d_loss_real, d_loss_fake) + 10 * gp  # Adding GP to the loss
+        d_loss = 0.5 * np.add(d_loss_real, d_loss_fake) #+ 10 * gp  # Adding GP to the loss
         
         # Train Generator
         noise = np.random.normal(0, 1, (batch_size, time_step, num_features))
@@ -154,12 +154,13 @@ divider = len(batch_sizes) // 2
 batch_size = batch_sizes[divider]
 
 # Train the GAN
-train_gan(epochs=150, batch_size=batch_size)
+train_gan(epochs=250, batch_size=batch_size)
 
 def generate_new_feature(last_data, new_value):
     old_value = last_data[-1,0]
     old_features = last_data[-1]
     change_rate = ((new_value - old_value) / old_value)
+    change_rate = scaler_y.transform(np.array(change_rate).reshape(-1,1)).flatten()
     change_amounts = old_features * change_rate
     weighted_features = old_features + change_amounts
     weighted_features_scaled = scaler_X.transform(weighted_features.reshape(1, -1)).flatten()
@@ -174,13 +175,13 @@ def generate_new_series_with_context(last_data, generate_num):
         predicted_value = gan_model.predict(context)
 
         # Extract the new price
-        predicted_price = predicted_value[0, 0]
+        predicted_price = predicted_value.reshape(1)[0]
 
         # Prepare features for the new history
-        new_features = generate_new_feature(last_data, predicted_price)
+        # new_features = generate_new_feature(last_data, predicted_price)
         
-        # noise = np.random.uniform(10, 300, num_features)
-        # new_features = scaler_X.transform(noise.reshape(1, -1)).flatten()
+        noise = np.random.uniform(10, 300, num_features)
+        new_features = scaler_X.transform(noise.reshape(1, -1)).flatten()
 
         new_features[0] = predicted_price  # Set the predicted price
 
@@ -197,7 +198,7 @@ last_sample = train_data[-1]
 last_sample = last_sample[1:]
 last_history = np.concatenate((last_sample, [features_test[0, :]]), axis=0)
 
-# generate_num = len(target_test)
+generate_num = len(target_test)
 # new_data = generate_new_series_with_context(last_history, generate_num)
 
 last_sample_2 = train_data[-1]
@@ -206,7 +207,6 @@ for i in range(len(features_test)):
     last_sample_2 = last_sample_2[1:].copy()
     last_sample_2 = np.concatenate((last_sample_2, [features_test[i, :]]), axis=0)
     features_test_data.append(last_sample_2)
-
 features_test_data = np.array(features_test_data)
 new_data = gan_model.predict(features_test_data)
 
