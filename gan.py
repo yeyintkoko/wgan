@@ -4,7 +4,7 @@ import tensorflow as tf
 import matplotlib.pyplot as plt
 from keras import layers
 from keras.models import Sequential, Model
-from keras.layers import LSTM, Dense, Input, Reshape, Conv1D, Flatten, Dropout, GRU
+from keras.layers import LSTM, Dense, Input, Reshape, Conv1D, Flatten, Dropout, GRU, LeakyReLU
 from keras.optimizers import Adam
 from sklearn.metrics import mean_squared_error
 from sklearn.linear_model import Lasso, Ridge
@@ -51,8 +51,11 @@ y = train_target
 def build_generator():
     model = Sequential()
     model.add(Input(shape=(time_step, num_features)))
-    model.add(LSTM(64))
-    model.add(layers.BatchNormalization(momentum=0.8))
+    model.add(Flatten())
+    model.add(Dense(64, activation='gelu'))
+    model.add(LeakyReLU(alpha=0.2))
+    model.add(Dense(128, activation='gelu'))
+    model.add(LeakyReLU(alpha=0.2))
     model.add(Dense(1, activation='linear'))
     model.add(Reshape((1, 1)))
     return model
@@ -64,9 +67,11 @@ generator.compile(loss='mean_squared_error', optimizer=Adam(0.0001, 0.5))
 def build_discriminator():
     model = Sequential()
     model.add(Input(shape=(1, 1)))
-    model.add(layers.Conv1D(64, kernel_size=5, strides=2, padding='same', activation='leaky_relu'))
-    model.add(layers.BatchNormalization(momentum=0.8))
-    model.add(layers.Flatten())  # Flatten the output before feeding into Dense layers
+    model.add(Flatten())
+    model.add(Dense(64, activation='relu'))
+    model.add(LeakyReLU(alpha=0.2))
+    model.add(Dense(32, activation='relu'))
+    model.add(LeakyReLU(alpha=0.2))
     model.add(Dense(1, activation='linear'))
     return model
 
@@ -114,7 +119,7 @@ def train_gan(epochs, batch_size):
 
         # Generate synthetic data using the complete feature set
         noise = np.random.normal(0, 1, (batch_size, time_step, num_features))
-        fake_data = generator.predict(noise)
+        fake_data = generator.predict(X[idx])
         
         # Calculate gradient penalty
         gp = gradient_penalty(real_data, fake_data)
@@ -126,7 +131,7 @@ def train_gan(epochs, batch_size):
         
         # Train Generator
         noise = np.random.normal(0, 1, (batch_size, time_step, num_features))
-        g_loss = gan_model.train_on_batch(noise, real_data)
+        g_loss = gan_model.train_on_batch(noise, np.ones((batch_size, 1)))
         
         if epoch % 10 == 0:
             print(f"{epoch} [D loss: {d_loss[0]:.4f}] [G loss: {g_loss[0]:.4f}]")
@@ -136,10 +141,10 @@ def get_divisors(n):
 
 batch_sizes = get_divisors(num_samples)
 divider = len(batch_sizes) // 2
-batch_size = batch_sizes[divider-1]
+batch_size = batch_sizes[divider]
 
 # Train the GAN
-train_gan(epochs=100, batch_size=batch_size)
+train_gan(epochs=650, batch_size=batch_size)
 
 def generate_new_feature(last_data, new_value):
     old_value = last_data[-1,0]
@@ -157,7 +162,7 @@ def generate_new_series_with_context(last_data, generate_num):
 
     for _ in range(generate_num):
         context = last_data.reshape(1, time_step, num_features)
-        predicted_value = generator.predict(context)
+        predicted_value = gan_model.predict(context)
 
         # Extract the new price
         predicted_price = predicted_value.reshape(1)[0]

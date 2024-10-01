@@ -44,7 +44,7 @@ gan = keras.Model(gan_input, gan_output)
 gan.compile(loss='binary_crossentropy', optimizer='adam')
 
 # Training the GAN
-epochs = 500 #10000
+epochs = 10000
 for epoch in range(epochs):
     # Train discriminator
     idx = np.random.randint(0, X_train.shape[0], 32)
