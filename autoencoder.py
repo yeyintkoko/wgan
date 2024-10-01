@@ -48,7 +48,7 @@ def load_data():
 def build_stacked_autoencoder(input_shape):
     input_layer = layers.Input(shape=input_shape)
     encoded = layers.Dense(64, activation='gelu')(input_layer)
-    encoded = layers.Dense(input_shape[0], activation='gelu')(encoded)
+    encoded = layers.Dense(input_shape[0], activation='linear')(encoded)
     
     decoded = layers.Dense(64, activation='relu')(encoded)
     decoded = layers.Dense(input_shape[0], activation='linear')(decoded)
@@ -72,6 +72,8 @@ autoencoder.fit(X_train, X_train, epochs=400, batch_size=8, shuffle=True, valida
 # Use encoder part of the autoencoder for feature selection
 encoded_features_train = encoder.predict(X_train)
 encoded_features_test = encoder.predict(X_test)
+
+print('-------------- encoded_features_train ---------', encoded_features_train)
 
 # Autocorrelation
 def autocorrelation(data, lag=1):
