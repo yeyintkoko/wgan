@@ -144,7 +144,7 @@ divider = len(batch_sizes) // 2
 batch_size = batch_sizes[divider]
 
 # Train the GAN
-train_gan(epochs=650, batch_size=batch_size)
+train_gan(epochs=950, batch_size=batch_size)
 
 def generate_new_feature(last_data, new_value):
     old_value = last_data[-1,0]
