@@ -56,8 +56,8 @@ def build_generator():
     model.add(LeakyReLU(alpha=0.2))
     model.add(Dense(128, activation='gelu'))
     model.add(LeakyReLU(alpha=0.2))
-    model.add(Dense(1, activation='linear'))
-    model.add(Reshape((1, 1)))
+    model.add(Dense(num_features, activation='linear'))
+    model.add(Reshape((1, num_features)))
     return model
 
 generator = build_generator()
@@ -66,7 +66,7 @@ generator.compile(loss='mean_squared_error', optimizer=Adam(0.0001, 0.5))
 # Define the CNN Discriminator
 def build_discriminator():
     model = Sequential()
-    model.add(Input(shape=(1, 1)))
+    model.add(Input(shape=(1, num_features)))
     model.add(Flatten())
     model.add(Dense(64, activation='relu'))
     model.add(LeakyReLU(alpha=0.2))
@@ -114,18 +114,18 @@ def train_gan(epochs, batch_size):
         idx = np.random.randint(0, num_samples, batch_size)
         
         # Real data
-        real_data = y[idx]
-        real_data = real_data.reshape(-1, 1, 1)
+        real_data = X[idx]
+        real_data = real_data.reshape(-1, 1, num_features)
 
         # Generate synthetic data using the complete feature set
         noise = np.random.normal(0, 1, (batch_size, time_step, num_features))
         fake_data = generator.predict(X[idx])
         
         # Calculate gradient penalty
-        gp = gradient_penalty(real_data, fake_data)
+        # gp = gradient_penalty(real_data, fake_data)
         
         # Train Discriminator
-        d_loss_real = discriminator.train_on_batch(real_data, np.ones((batch_size, 1)))
+        d_loss_real = discriminator.train_on_batch(real_data, np.ones((batch_size * time_step, 1)))
         d_loss_fake = discriminator.train_on_batch(fake_data, np.zeros((batch_size, 1)))
         d_loss = 0.5 * np.add(d_loss_real, d_loss_fake) #+ 10 * gp  # Adding GP to the loss
         
@@ -144,7 +144,7 @@ divider = len(batch_sizes) // 2
 batch_size = batch_sizes[divider]
 
 # Train the GAN
-train_gan(epochs=950, batch_size=batch_size)
+train_gan(epochs=450, batch_size=batch_size)
 
 def generate_new_feature(last_data, new_value):
     old_value = last_data[-1,0]
@@ -167,13 +167,17 @@ def generate_new_series_with_context(last_data, generate_num):
         # Extract the new price
         predicted_price = predicted_value.reshape(1)[0]
 
+        new_features = generator.predict(context)
+        new_features = new_features.flatten()
+
         # Prepare features for the new history
         # new_features = generate_new_feature(last_data, predicted_price)
         
-        noise = np.random.uniform(10, 300, num_features)
-        new_features = scaler_X.transform(noise.reshape(1, -1)).flatten()
+        # noise = np.random.uniform(10, 300, num_features)
+        # new_features = scaler_X.transform(noise.reshape(1, -1)).flatten()
 
         new_features[0] = predicted_price  # Set the predicted price
+        print('------ new_features -----', new_features)
 
         generated_series.append(predicted_price)
 
