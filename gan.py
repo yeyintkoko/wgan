@@ -6,7 +6,7 @@ from keras import layers
 from keras.models import Sequential, Model
 from keras.layers import LSTM, Dense, Input, Reshape, Conv1D, Flatten, Dropout, GRU, LeakyReLU
 from keras.optimizers import Adam
-from sklearn.metrics import mean_squared_error
+from sklearn.metrics import mean_squared_error, mean_absolute_error, r2_score
 from sklearn.linear_model import Lasso, Ridge
 from sklearn.preprocessing import StandardScaler
 from autoencoder import encoded_features_test, encoded_features_train, y_train, y_test, scaler_y, scaler_X, num_training_days
@@ -55,31 +55,31 @@ def build_generator():
     layers.Dense(256, activation='gelu'),
     layers.Dense(512, activation='gelu'),
     layers.Dense(1024, activation='gelu'),
-    model.add(Dense(num_features, activation='linear'))
-    model.add(Reshape((1, num_features)))
+    model.add(Dense(time_step * num_features, activation='linear'))
+    model.add(Reshape((time_step, num_features)))
     return model
 
 generator = build_generator()
 generator_optimizer = tf.keras.optimizers.Adam(1e-4)
 
 # Define the CNN Discriminator
-def build_discriminator():
+def build_critic():
     model = Sequential()
-    model.add(Input(shape=(1, num_features)))
+    model.add(Input(shape=(time_step, num_features)))
     model.add(Flatten())
     layers.Dense(512, activation='relu'),
     layers.Dense(256, activation='relu'),
     model.add(Dense(1, activation='linear'))
     return model
 
-discriminator = build_discriminator()
-discriminator_optimizer = tf.keras.optimizers.Adam(1e-4)
+critic = build_critic()
+critic_optimizer = tf.keras.optimizers.Adam(1e-5)
 
 # Build and compile the GAN
 def build_gan():
     gan_input = Input(shape=(time_step, num_features))
     generated_data = generator(gan_input)
-    gan_output = discriminator(generated_data)
+    gan_output = critic(generated_data)
     model = Model(gan_input, gan_output)
     return model
 
@@ -87,43 +87,49 @@ gan_model = build_gan()
 gan_optimizer = tf.keras.optimizers.Adam(1e-4)
 gan_model.compile(loss='mean_squared_error', optimizer=gan_optimizer)
 
-n_discriminator = 5  # Number of training steps for the discriminator per generator step
+n_critic = 2  # Number of training steps for the critic per generator step
 clip_value = 0.01
+
+critic_losses = []
+generator_losses = []
 
 # Train the GAN
 def train_gan(epochs, batch_size):
     for epoch in range(epochs):
-        for _ in range(n_discriminator):
+        for _ in range(n_critic):
             idx = np.random.randint(0, num_samples, batch_size)
         
             # Real data
             real_data = X[idx]
-            real_data = real_data.reshape(-1, 1, num_features)
+            real_data = real_data.reshape(-1, time_step, num_features)
 
             # Generate synthetic data using the complete feature set
             noise = np.random.normal(0, 1, (batch_size, time_step, num_features))
-            fake_data = generator.predict(X[idx])
+            fake_data = generator.predict(noise)
 
             with tf.GradientTape() as tape:
-                real_loss = tf.reduce_mean(discriminator(real_data))
-                fake_loss = tf.reduce_mean(discriminator(fake_data))
+                real_loss = tf.reduce_mean(critic(real_data))
+                fake_loss = tf.reduce_mean(critic(fake_data))
                 d_loss = fake_loss - real_loss
             
-            grads = tape.gradient(d_loss, discriminator.trainable_variables)
-            discriminator_optimizer.apply_gradients(zip(grads, discriminator.trainable_variables))
+            grads = tape.gradient(d_loss, critic.trainable_variables)
+            critic_optimizer.apply_gradients(zip(grads, critic.trainable_variables))
 
             # Clip weights
-            for weight in discriminator.trainable_variables:
+            for weight in critic.trainable_variables:
                 weight.assign(tf.clip_by_value(weight, -clip_value, clip_value))
             
         # Train Generator
         noise = np.random.normal(0, 1, (batch_size, time_step, num_features))
         with tf.GradientTape() as tape:
             fake_data = generator(noise)
-            g_loss = -tf.reduce_mean(discriminator(fake_data))
+            g_loss = -tf.reduce_mean(critic(fake_data))
 
         grads = tape.gradient(g_loss, gan_model.trainable_variables)
         gan_optimizer.apply_gradients(zip(grads, gan_model.trainable_variables))
+
+        critic_losses.append(d_loss.numpy())
+        generator_losses.append(g_loss.numpy())
 
         if epoch % 10 == 0:
             print(f'Epoch {epoch}, Discriminator Loss: {d_loss.numpy()}, Generator Loss: {g_loss.numpy()}')
@@ -136,17 +142,19 @@ divider = len(batch_sizes) // 2
 batch_size = batch_sizes[divider]
 
 # Train the GAN
-train_gan(epochs=250, batch_size=batch_size)
+train_gan(epochs=50, batch_size=batch_size)
 
-def generate_new_feature(last_data, new_value):
-    old_value = last_data[-1,0]
-    old_features = last_data[-1]
-    change_rate = ((new_value - old_value) / old_value)
-    change_rate = scaler_y.transform(np.array(change_rate).reshape(-1,1)).flatten()
-    change_amounts = old_features * change_rate
-    weighted_features = old_features + change_amounts
-    weighted_features_scaled = scaler_X.transform(weighted_features.reshape(1, -1)).flatten()
-    return weighted_features_scaled
+def plot_loss():
+    plt.figure(figsize=(12, 6))
+    plt.plot(critic_losses, label='Discriminator Loss', color='red')
+    plt.plot(generator_losses, label='Generator Loss', color='blue')
+    plt.title('Loss Trends Over Epochs')
+    plt.xlabel('Epochs (every step)')
+    plt.ylabel('Loss')
+    plt.legend()
+    plt.show()
+
+# plot_loss()
 
 # Generate New Price Series with context
 def generate_new_series_with_context(last_data, generate_num):
@@ -159,17 +167,14 @@ def generate_new_series_with_context(last_data, generate_num):
         # Extract the new price
         predicted_price = predicted_value.reshape(1)[0]
 
-        new_features = generator.predict(context)
-        new_features = new_features.flatten()
-
         # Prepare features for the new history
-        # new_features = generate_new_feature(last_data, predicted_price)
-        
+        new_features = generator.predict(context)
+        new_features = new_features[0, 0, :]
+
         # noise = np.random.uniform(10, 300, num_features)
         # new_features = scaler_X.transform(noise.reshape(1, -1)).flatten()
 
         new_features[0] = predicted_price  # Set the predicted price
-        print('------ new_features -----', new_features)
 
         generated_series.append(predicted_price)
 
@@ -178,6 +183,17 @@ def generate_new_series_with_context(last_data, generate_num):
         last_data = np.concatenate((last_data, [new_features]), axis=0)
 
     return np.array(generated_series)
+
+# Evaluate the model using multiple metrics
+def evaluate_model(true_values, predicted_values):
+    mse = mean_squared_error(true_values, predicted_values)
+    mae = mean_absolute_error(true_values, predicted_values)
+    r2 = r2_score(true_values, predicted_values)
+
+    print("Evaluation Metrics:")
+    print(f"Mean Squared Error (MSE): {mse}")
+    print(f"Mean Absolute Error (MAE): {mae}")
+    print(f"R-squared (R²): {r2}")
 
 # Generate new price series
 last_sample = train_data[-1]
@@ -200,14 +216,15 @@ new_data = gan_model.predict(features_test_data)
 predict_origin = scaler_y.inverse_transform(new_data.reshape(-1, 1)).flatten()
 test_origin = scaler_y.inverse_transform(target_test).flatten()
 
-mse = mean_squared_error(target_test, new_data)
-print("Mean Squared Error with Selected Features:", mse)
 # print('new_data', predict_origin[100:])
+
+# Call the evaluation function after generating new data
+evaluate_model(target_test, new_data)
 
 # Plot generated price series
 plt.figure(figsize=(10, 5))
-plt.plot(predict_origin, label='Generated', alpha=0.3)
-plt.plot(test_origin, label='Real', alpha=0.7)  # Plot real prices
+plt.plot(new_data, label='Generated', alpha=0.3)
+plt.plot(target_test, label='Real', alpha=0.7)  # Plot real prices
 plt.title("Generated Series vs Real")
 plt.legend()
 plt.show()
