@@ -52,31 +52,28 @@ def build_generator():
     model = Sequential()
     model.add(Input(shape=(time_step, num_features)))
     model.add(Flatten())
-    model.add(Dense(64, activation='gelu'))
-    model.add(LeakyReLU(alpha=0.2))
-    model.add(Dense(128, activation='gelu'))
-    model.add(LeakyReLU(alpha=0.2))
+    layers.Dense(256, activation='gelu'),
+    layers.Dense(512, activation='gelu'),
+    layers.Dense(1024, activation='gelu'),
     model.add(Dense(num_features, activation='linear'))
     model.add(Reshape((1, num_features)))
     return model
 
 generator = build_generator()
-generator.compile(loss='mean_squared_error', optimizer=Adam(0.0001, 0.5))
+generator_optimizer = tf.keras.optimizers.Adam(1e-4)
 
 # Define the CNN Discriminator
 def build_discriminator():
     model = Sequential()
     model.add(Input(shape=(1, num_features)))
     model.add(Flatten())
-    model.add(Dense(64, activation='relu'))
-    model.add(LeakyReLU(alpha=0.2))
-    model.add(Dense(32, activation='relu'))
-    model.add(LeakyReLU(alpha=0.2))
+    layers.Dense(512, activation='relu'),
+    layers.Dense(256, activation='relu'),
     model.add(Dense(1, activation='linear'))
     return model
 
 discriminator = build_discriminator()
-discriminator.compile(loss='mean_squared_error', optimizer=Adam(0.0001, 0.5), metrics=['accuracy'])
+discriminator_optimizer = tf.keras.optimizers.Adam(1e-4)
 
 # Build and compile the GAN
 def build_gan():
@@ -87,54 +84,49 @@ def build_gan():
     return model
 
 gan_model = build_gan()
-gan_model.compile(loss='mean_squared_error', optimizer=Adam(0.0001, 0.5))
+gan_optimizer = tf.keras.optimizers.Adam(1e-4)
+gan_model.compile(loss='mean_squared_error', optimizer=gan_optimizer)
 
-# Gradient penalty function
-def gradient_penalty(real_data, fake_data):
-    # Convert to TensorFlow tensors and ensure they are of the same type
-    real_data = tf.convert_to_tensor(real_data, dtype=tf.float32)
-    fake_data = tf.convert_to_tensor(fake_data, dtype=tf.float32)
-
-    # Randomly interpolate between real and fake data
-    alpha = tf.random.uniform(shape=(real_data.shape[0], 1, 1), minval=0.0, maxval=1.0)
-    interpolated = alpha * real_data + (1 - alpha) * fake_data
-    
-    with tf.GradientTape() as tape:
-        tape.watch(interpolated)
-        # Get the discriminator output for interpolated data
-        d_interpolated = discriminator(interpolated)
-    
-    gradients = tape.gradient(d_interpolated, interpolated)
-    gp = tf.reduce_mean((tf.norm(gradients, axis=1) - 1.0) ** 2)
-    return gp
+n_discriminator = 5  # Number of training steps for the discriminator per generator step
+clip_value = 0.01
 
 # Train the GAN
 def train_gan(epochs, batch_size):
     for epoch in range(epochs):
-        idx = np.random.randint(0, num_samples, batch_size)
+        for _ in range(n_discriminator):
+            idx = np.random.randint(0, num_samples, batch_size)
         
-        # Real data
-        real_data = X[idx]
-        real_data = real_data.reshape(-1, 1, num_features)
+            # Real data
+            real_data = X[idx]
+            real_data = real_data.reshape(-1, 1, num_features)
 
-        # Generate synthetic data using the complete feature set
-        noise = np.random.normal(0, 1, (batch_size, time_step, num_features))
-        fake_data = generator.predict(X[idx])
-        
-        # Calculate gradient penalty
-        # gp = gradient_penalty(real_data, fake_data)
-        
-        # Train Discriminator
-        d_loss_real = discriminator.train_on_batch(real_data, np.ones((batch_size * time_step, 1)))
-        d_loss_fake = discriminator.train_on_batch(fake_data, np.zeros((batch_size, 1)))
-        d_loss = 0.5 * np.add(d_loss_real, d_loss_fake) #+ 10 * gp  # Adding GP to the loss
-        
+            # Generate synthetic data using the complete feature set
+            noise = np.random.normal(0, 1, (batch_size, time_step, num_features))
+            fake_data = generator.predict(X[idx])
+
+            with tf.GradientTape() as tape:
+                real_loss = tf.reduce_mean(discriminator(real_data))
+                fake_loss = tf.reduce_mean(discriminator(fake_data))
+                d_loss = fake_loss - real_loss
+            
+            grads = tape.gradient(d_loss, discriminator.trainable_variables)
+            discriminator_optimizer.apply_gradients(zip(grads, discriminator.trainable_variables))
+
+            # Clip weights
+            for weight in discriminator.trainable_variables:
+                weight.assign(tf.clip_by_value(weight, -clip_value, clip_value))
+            
         # Train Generator
         noise = np.random.normal(0, 1, (batch_size, time_step, num_features))
-        g_loss = gan_model.train_on_batch(noise, np.ones((batch_size, 1)))
-        
+        with tf.GradientTape() as tape:
+            fake_data = generator(noise)
+            g_loss = -tf.reduce_mean(discriminator(fake_data))
+
+        grads = tape.gradient(g_loss, gan_model.trainable_variables)
+        gan_optimizer.apply_gradients(zip(grads, gan_model.trainable_variables))
+
         if epoch % 10 == 0:
-            print(f"{epoch} [D loss: {d_loss[0]:.4f}] [G loss: {g_loss[0]:.4f}]")
+            print(f'Epoch {epoch}, Discriminator Loss: {d_loss.numpy()}, Generator Loss: {g_loss.numpy()}')
 
 def get_divisors(n):
     return [i for i in range(1, n + 1) if n % i == 0]
@@ -144,7 +136,7 @@ divider = len(batch_sizes) // 2
 batch_size = batch_sizes[divider]
 
 # Train the GAN
-train_gan(epochs=450, batch_size=batch_size)
+train_gan(epochs=250, batch_size=batch_size)
 
 def generate_new_feature(last_data, new_value):
     old_value = last_data[-1,0]
