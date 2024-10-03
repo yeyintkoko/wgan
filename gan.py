@@ -4,10 +4,9 @@ import tensorflow as tf
 import matplotlib.pyplot as plt
 from keras import layers
 from keras.models import Sequential, Model
-from keras.layers import LSTM, Dense, Input, Reshape, Conv1D, Flatten, Dropout, GRU, LeakyReLU
+from keras.layers import LSTM, Dense, Input, Reshape, Conv1D, Flatten, Dropout, TimeDistributed, LeakyReLU
 from keras.optimizers import Adam
 from sklearn.metrics import mean_squared_error, mean_absolute_error, r2_score
-from sklearn.linear_model import Lasso, Ridge
 from sklearn.preprocessing import StandardScaler
 from autoencoder import encoded_features_test, encoded_features_train, y_train, y_test, scaler_y, scaler_X, num_training_days
 
@@ -47,17 +46,18 @@ train_target = np.array(train_target)
 X = train_data
 y = train_target
 
-# Define the LSTM/GRU Generator
+# Define the LSTM Generator
 def build_generator():
     model = Sequential()
     model.add(Input(shape=(time_step, num_features)))
     model.add(Flatten())
-    layers.Dense(256, activation='gelu'),
-    layers.Dense(512, activation='gelu'),
-    layers.Dense(1024, activation='gelu'),
+    # model.add(Dense(64, activation='gelu'))
+    model.add(Dense(128, activation='gelu'))
+    model.add(Dense(256, activation='gelu'))
     model.add(Dense(time_step * num_features, activation='linear'))
     model.add(Reshape((time_step, num_features)))
     return model
+
 
 generator = build_generator()
 generator_optimizer = tf.keras.optimizers.Adam(1e-4)
@@ -67,8 +67,9 @@ def build_critic():
     model = Sequential()
     model.add(Input(shape=(time_step, num_features)))
     model.add(Flatten())
-    layers.Dense(512, activation='relu'),
-    layers.Dense(256, activation='relu'),
+    model.add(Dense(128, activation='relu'))
+    model.add(Dense(64, activation='relu'))
+    model.add(Dense(32, activation='relu'))
     model.add(Dense(1, activation='linear'))
     return model
 
@@ -87,7 +88,7 @@ gan_model = build_gan()
 gan_optimizer = tf.keras.optimizers.Adam(1e-4)
 gan_model.compile(loss='mean_squared_error', optimizer=gan_optimizer)
 
-n_critic = 2  # Number of training steps for the critic per generator step
+n_critic = 5  # Number of training steps for the critic per generator step
 clip_value = 0.01
 
 critic_losses = []
@@ -142,7 +143,7 @@ divider = len(batch_sizes) // 2
 batch_size = batch_sizes[divider]
 
 # Train the GAN
-train_gan(epochs=50, batch_size=batch_size)
+train_gan(epochs=150, batch_size=batch_size)
 
 def plot_loss():
     plt.figure(figsize=(12, 6))
@@ -154,7 +155,7 @@ def plot_loss():
     plt.legend()
     plt.show()
 
-# plot_loss()
+plot_loss()
 
 # Generate New Price Series with context
 def generate_new_series_with_context(last_data, generate_num):
