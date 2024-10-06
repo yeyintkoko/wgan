@@ -40,8 +40,8 @@ def load_data():
     scaler_y = StandardScaler()
     y_train_reshaped = y_train.reshape(-1, 1)  # Reshape for scaler
     y_test_reshaped = y_test.reshape(-1, 1)  # Reshape for scaler
-    y_train = scaler_y.fit_transform(y_train_reshaped)
-    y_test = scaler_y.transform(y_test_reshaped)  # Use transform, not fit_transform
+    y_train = scaler_y.fit_transform(y_train_reshaped).flatten()
+    y_test = scaler_y.transform(y_test_reshaped).flatten()  # Use transform, not fit_transform
 
     return (X_train, y_train), (X_test, y_test), (scaler_X, scaler_y), num_training_days
 

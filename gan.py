@@ -4,7 +4,7 @@ import tensorflow as tf
 import matplotlib.pyplot as plt
 from keras import layers
 from keras.models import Sequential, Model
-from keras.layers import LSTM, Dense, Input, Reshape, Conv1D, Flatten, Dropout, TimeDistributed, LeakyReLU
+from keras.layers import LSTM, Dense, Input, Reshape, Conv1D, Flatten, Dropout, TimeDistributed, LeakyReLU, BatchNormalization
 from keras.optimizers import Adam
 from sklearn.metrics import mean_squared_error, mean_absolute_error, r2_score
 from sklearn.preprocessing import StandardScaler
@@ -61,7 +61,7 @@ def build_generator():
 
 
 generator = build_generator()
-generator_optimizer = tf.keras.optimizers.Adam(1e-4)
+generator_optimizer = Adam(1e-4)
 
 # Define the CNN Discriminator
 def build_critic():
@@ -75,7 +75,7 @@ def build_critic():
     return model
 
 critic = build_critic()
-critic_optimizer = tf.keras.optimizers.Adam(1e-5)
+critic_optimizer = Adam(1e-5)
 
 # Build and compile the GAN
 def build_gan():
@@ -86,7 +86,7 @@ def build_gan():
     return model
 
 gan_model = build_gan()
-gan_optimizer = tf.keras.optimizers.Adam(1e-4)
+gan_optimizer = Adam(1e-4)
 gan_model.compile(loss='mean_squared_error', optimizer=gan_optimizer)
 
 n_critic = 5  # Number of training steps for the critic per generator step
@@ -102,10 +102,9 @@ def train_gan(epochs, batch_size):
             idx = np.random.randint(0, num_samples, batch_size)
         
             # Real data
-            real_data = X[idx]
-            real_data = real_data.reshape(-1, time_step, num_features)
+            real_data = X[idx].reshape(-1, time_step, num_features)
 
-            # Generate synthetic data using the complete feature set
+            # Generate synthetic data
             noise = np.random.normal(0, 1, (batch_size, time_step, num_features))
             fake_data = generator.predict(noise)
 
@@ -120,7 +119,7 @@ def train_gan(epochs, batch_size):
             # Clip weights
             for weight in critic.trainable_variables:
                 weight.assign(tf.clip_by_value(weight, -clip_value, clip_value))
-            
+
         # Train Generator
         noise = np.random.normal(0, 1, (batch_size, time_step, num_features))
         with tf.GradientTape() as tape:
@@ -216,9 +215,10 @@ new_data = gan_model.predict(features_test_data)
 
 # Inverse transform to get the actual predicted price
 predict_origin = scaler_y.inverse_transform(new_data.reshape(-1, 1)).flatten()
-test_origin = scaler_y.inverse_transform(target_test).flatten()
+test_origin = scaler_y.inverse_transform(target_test.reshape(-1, 1)).flatten()
 
-# print('new_data', predict_origin[100:])
+print('new_data', predict_origin[-10:])
+print('test_origin', test_origin[-10:])
 
 # Call the evaluation function after generating new data
 evaluate_model(target_test, new_data)
