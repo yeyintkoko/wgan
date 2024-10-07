@@ -51,7 +51,6 @@ def build_generator():
     model = Sequential()
     model.add(Input(shape=(time_step, num_features)))
     model.add(Flatten())
-    model.add(Dense(32, activation='gelu'))
     model.add(Dense(64, activation='gelu'))
     model.add(Dense(128, activation='gelu'))
     model.add(Dense(256, activation='gelu'))
@@ -67,10 +66,10 @@ generator_optimizer = Adam(1e-4)
 def build_critic():
     model = Sequential()
     model.add(Input(shape=(time_step, num_features)))
+    model.add(Conv1D(128, kernel_size=5, strides=2, padding='same', activation='leaky_relu'))
     model.add(Flatten())
-    model.add(Dense(128, activation='relu'))
+    model.add(Dense(256, activation='relu'))
     model.add(Dense(64, activation='relu'))
-    model.add(Dense(32, activation='relu'))
     model.add(Dense(1, activation='linear'))
     return model
 
@@ -89,7 +88,7 @@ gan_model = build_gan()
 gan_optimizer = Adam(1e-4)
 gan_model.compile(loss='mean_squared_error', optimizer=gan_optimizer)
 
-n_critic = 5  # Number of training steps for the critic per generator step
+n_critic = 10  # Number of training steps for the critic per generator step
 clip_value = 0.01
 
 critic_losses = []
@@ -219,6 +218,12 @@ test_origin = scaler_y.inverse_transform(target_test.reshape(-1, 1)).flatten()
 
 print('new_data', predict_origin[-10:])
 print('test_origin', test_origin[-10:])
+
+print('critic_losses', critic_losses[-1])
+print('generator_losses', generator_losses[-1])
+
+print('predict_origin.shape', predict_origin.shape)
+print('test_origin.shape', test_origin.shape)
 
 # Call the evaluation function after generating new data
 evaluate_model(target_test, new_data)
