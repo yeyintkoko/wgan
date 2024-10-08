@@ -50,7 +50,7 @@ y = train_target
 def build_generator():
     model = Sequential()
     model.add(Input(shape=(time_step, num_features)))
-    model.add(Flatten())
+    model.add(LSTM(32))
     model.add(Dense(64, activation='gelu'))
     model.add(Dense(128, activation='gelu'))
     model.add(Dense(256, activation='gelu'))
@@ -68,7 +68,8 @@ def build_critic():
     model.add(Input(shape=(time_step, num_features)))
     model.add(Conv1D(128, kernel_size=5, strides=2, padding='same', activation='leaky_relu'))
     model.add(Flatten())
-    model.add(Dense(256, activation='relu'))
+    model.add(Dense(512, activation='relu'))
+    model.add(Dense(128, activation='relu'))
     model.add(Dense(64, activation='relu'))
     model.add(Dense(1, activation='linear'))
     return model
@@ -88,7 +89,7 @@ gan_model = build_gan()
 gan_optimizer = Adam(1e-4)
 gan_model.compile(loss='mean_squared_error', optimizer=gan_optimizer)
 
-n_critic = 10  # Number of training steps for the critic per generator step
+n_critic = 15  # Number of training steps for the critic per generator step
 clip_value = 0.01
 
 critic_losses = []
