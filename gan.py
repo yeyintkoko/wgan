@@ -3,7 +3,7 @@ import pandas as pd
 import tensorflow as tf
 import matplotlib.pyplot as plt
 from keras import layers
-from keras.models import Sequential, Model
+from keras.models import Sequential, Model, load_model
 from keras.layers import LSTM, Dense, Input, Reshape, Conv1D, Flatten, Dropout, TimeDistributed, LeakyReLU, BatchNormalization
 from keras.optimizers import Adam
 from sklearn.metrics import mean_squared_error, mean_absolute_error, r2_score
@@ -46,11 +46,15 @@ train_target = np.array(train_target)
 X = train_data
 y = train_target
 
+generator_lr = 1e-4
+critic_lr = 1e-5
+
 # Define the LSTM Generator
 def build_generator():
     model = Sequential()
     model.add(Input(shape=(time_step, num_features)))
-    model.add(LSTM(32))
+    model.add(Flatten())
+    model.add(Dense(32, activation='gelu'))
     model.add(Dense(64, activation='gelu'))
     model.add(Dense(128, activation='gelu'))
     model.add(Dense(256, activation='gelu'))
@@ -58,24 +62,24 @@ def build_generator():
     model.add(Reshape((time_step, num_features)))
     return model
 
-
 generator = build_generator()
-generator_optimizer = Adam(1e-4)
+# generator = load_model('generator_model.keras') # load trained generator
+generator_optimizer = Adam(generator_lr)
 
 # Define the CNN Discriminator
 def build_critic():
     model = Sequential()
     model.add(Input(shape=(time_step, num_features)))
-    model.add(Conv1D(128, kernel_size=5, strides=2, padding='same', activation='leaky_relu'))
     model.add(Flatten())
-    model.add(Dense(512, activation='relu'))
     model.add(Dense(128, activation='relu'))
     model.add(Dense(64, activation='relu'))
+    model.add(Dense(32, activation='relu'))
     model.add(Dense(1, activation='linear'))
     return model
 
 critic = build_critic()
-critic_optimizer = Adam(1e-5)
+# critic = load_model('critic_model.keras') # load trained critic
+critic_optimizer = Adam(critic_lr)
 
 # Build and compile the GAN
 def build_gan():
@@ -86,10 +90,11 @@ def build_gan():
     return model
 
 gan_model = build_gan()
-gan_optimizer = Adam(1e-4)
-gan_model.compile(loss='mean_squared_error', optimizer=gan_optimizer)
+# gan_model = load_model('gan_model.keras') # load trained gan_model
+gan_optimizer = Adam(generator_lr)
+gan_model.compile(loss='mean_absolute_error', optimizer=gan_optimizer)
 
-n_critic = 15  # Number of training steps for the critic per generator step
+n_critic = 5  # Number of training steps for the critic per generator step
 clip_value = 0.01
 
 critic_losses = []
@@ -190,11 +195,13 @@ def evaluate_model(true_values, predicted_values):
     mse = mean_squared_error(true_values, predicted_values)
     mae = mean_absolute_error(true_values, predicted_values)
     r2 = r2_score(true_values, predicted_values)
+    mape = np.mean(np.abs((true_values - predicted_values) / true_values)) * 100
 
     print("Evaluation Metrics:")
     print(f"Mean Squared Error (MSE): {mse}")
     print(f"Mean Absolute Error (MAE): {mae}")
     print(f"R-squared (R²): {r2}")
+    print(f"Mean Absolute Percentage Error (MAPE): {mape:.2f}%")
 
 # Generate new price series
 last_sample = train_data[-1]
@@ -216,6 +223,15 @@ new_data = gan_model.predict(features_test_data)
 # Inverse transform to get the actual predicted price
 predict_origin = scaler_y.inverse_transform(new_data.reshape(-1, 1)).flatten()
 test_origin = scaler_y.inverse_transform(target_test.reshape(-1, 1)).flatten()
+
+generator.summary()
+critic.summary()
+gan_model.summary()
+
+generator.save('generator_model.keras')
+critic.save('critic_model.keras')
+gan_model.save('gan_model.keras')
+
 
 print('new_data', predict_origin[-10:])
 print('test_origin', test_origin[-10:])
