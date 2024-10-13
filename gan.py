@@ -18,8 +18,17 @@ features_test = encoded_features_test
 target_train = y_train
 target_test = y_test
 
-# Define sequence length and number of features
+# Learning rates
+generator_lr = 1e-4
+critic_lr = 1e-5
+
+n_critic = 5  # Number of training steps for the critic per generator step
+clip_value = 0.01
+
 time_step = 50
+num_epoch = 150
+
+# Define sequence length and number of features
 num_features = features_train.shape[1]
 num_samples = len(features_train) - time_step
 
@@ -55,9 +64,6 @@ train_target = np.array(train_target)
 
 X = train_data
 y = train_target
-
-generator_lr = 1e-4
-critic_lr = 1e-5
 
 # Define the LSTM Generator
 def build_generator():
@@ -103,9 +109,6 @@ gan_model = build_gan()
 # gan_model = load_model('gan_model.keras') # load trained gan_model
 gan_optimizer = Adam(generator_lr)
 
-n_critic = 5  # Number of training steps for the critic per generator step
-clip_value = 0.01
-
 critic_losses = []
 generator_losses = []
 
@@ -148,7 +151,7 @@ def train_gan(epochs, batch_size):
             print(f'Epoch {epoch}, Discriminator Loss: {c_loss.numpy()}, Generator Loss: {g_loss.numpy()}')
 
 # Train the GAN
-train_gan(epochs=150, batch_size=batch_size)
+train_gan(epochs=num_epoch, batch_size=batch_size)
 
 def plot_loss():
     plt.figure(figsize=(12, 6))
