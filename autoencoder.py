@@ -73,6 +73,9 @@ autoencoder.fit(X_train, X_train, epochs=400, batch_size=8, shuffle=True, valida
 encoded_features_train = encoder.predict(X_train)
 encoded_features_test = encoder.predict(X_test)
 
+def get_divisors(n):
+    return [i for i in range(1, n + 1) if n % i == 0]
+
 # Autocorrelation
 def autocorrelation(data, lag=1):
     # Drop any columns that contain NaN values

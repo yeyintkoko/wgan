@@ -4,11 +4,11 @@ import tensorflow as tf
 import matplotlib.pyplot as plt
 from keras import layers
 from keras.models import Sequential, Model, load_model
-from keras.layers import LSTM, Dense, Input, Reshape, Conv1D, Flatten, Dropout, TimeDistributed, LeakyReLU, BatchNormalization
+from keras.layers import LSTM, Dense, Input, Reshape, Conv1D, Flatten, MaxPooling1D, Dropout, TimeDistributed, LeakyReLU, BatchNormalization
 from keras.optimizers import Adam
 from sklearn.metrics import mean_squared_error, mean_absolute_error, r2_score
 from sklearn.preprocessing import StandardScaler
-from autoencoder import encoded_features_test, encoded_features_train, y_train, y_test, scaler_y, scaler_X, num_training_days
+from autoencoder import encoded_features_test, encoded_features_train, y_train, y_test, scaler_y, scaler_X, num_training_days, get_divisors
 
 # np.set_printoptions(suppress=True, precision=6)
 
@@ -22,6 +22,16 @@ target_test = y_test
 time_step = 50
 num_features = features_train.shape[1]
 num_samples = len(features_train) - time_step
+
+batch_sizes = get_divisors(num_samples)
+# Adjust time_step size, so batch_size will be a divisor number of num_sample which is not 1 or the vlaue of num_samples
+while len(batch_sizes) < 3:
+    time_step = time_step - 1
+    num_samples = len(features_train) - time_step
+    batch_sizes = get_divisors(num_samples)
+
+divider = len(batch_sizes) // 2
+batch_size = batch_sizes[divider]
 
 samples = features_train[time_step:]
 targets = target_train[time_step:]
@@ -92,7 +102,6 @@ def build_gan():
 gan_model = build_gan()
 # gan_model = load_model('gan_model.keras') # load trained gan_model
 gan_optimizer = Adam(generator_lr)
-gan_model.compile(loss='mean_absolute_error', optimizer=gan_optimizer)
 
 n_critic = 5  # Number of training steps for the critic per generator step
 clip_value = 0.01
@@ -110,15 +119,15 @@ def train_gan(epochs, batch_size):
             real_data = X[idx].reshape(-1, time_step, num_features)
 
             # Generate synthetic data
-            noise = np.random.normal(0, 1, (batch_size, time_step, num_features))
-            fake_data = generator.predict(noise)
+            noise = tf.random.normal(shape=(batch_size, time_step, num_features))
+            fake_data = generator(noise)
 
             with tf.GradientTape() as tape:
                 real_loss = tf.reduce_mean(critic(real_data))
                 fake_loss = tf.reduce_mean(critic(fake_data))
-                d_loss = fake_loss - real_loss
+                c_loss = fake_loss - real_loss
             
-            grads = tape.gradient(d_loss, critic.trainable_variables)
+            grads = tape.gradient(c_loss, critic.trainable_variables)
             critic_optimizer.apply_gradients(zip(grads, critic.trainable_variables))
 
             # Clip weights
@@ -126,26 +135,17 @@ def train_gan(epochs, batch_size):
                 weight.assign(tf.clip_by_value(weight, -clip_value, clip_value))
 
         # Train Generator
-        noise = np.random.normal(0, 1, (batch_size, time_step, num_features))
         with tf.GradientTape() as tape:
-            fake_data = generator(noise)
-            g_loss = -tf.reduce_mean(critic(fake_data))
+            g_loss = -tf.reduce_mean(gan_model(noise))
 
         grads = tape.gradient(g_loss, gan_model.trainable_variables)
         gan_optimizer.apply_gradients(zip(grads, gan_model.trainable_variables))
 
-        critic_losses.append(d_loss.numpy())
+        critic_losses.append(c_loss.numpy())
         generator_losses.append(g_loss.numpy())
 
         if epoch % 10 == 0:
-            print(f'Epoch {epoch}, Discriminator Loss: {d_loss.numpy()}, Generator Loss: {g_loss.numpy()}')
-
-def get_divisors(n):
-    return [i for i in range(1, n + 1) if n % i == 0]
-
-batch_sizes = get_divisors(num_samples)
-divider = len(batch_sizes) // 2
-batch_size = batch_sizes[divider]
+            print(f'Epoch {epoch}, Discriminator Loss: {c_loss.numpy()}, Generator Loss: {g_loss.numpy()}')
 
 # Train the GAN
 train_gan(epochs=150, batch_size=batch_size)
@@ -218,7 +218,7 @@ for i in range(len(features_test)):
     last_sample_2 = np.concatenate((last_sample_2, [features_test[i, :]]), axis=0)
     features_test_data.append(last_sample_2)
 features_test_data = np.array(features_test_data)
-new_data = gan_model.predict(features_test_data)
+new_data = gan_model.predict(features_test_data).flatten()
 
 # Inverse transform to get the actual predicted price
 predict_origin = scaler_y.inverse_transform(new_data.reshape(-1, 1)).flatten()
@@ -232,9 +232,12 @@ generator.save('generator_model.keras')
 critic.save('critic_model.keras')
 gan_model.save('gan_model.keras')
 
+print('batch_sizes', batch_sizes)
+print('batch_size', batch_size)
+print('time_step', time_step)
 
-print('new_data', predict_origin[-10:])
-print('test_origin', test_origin[-10:])
+print('new_data', new_data[-10:])
+print('target_test', target_test[-10:])
 
 print('critic_losses', critic_losses[-1])
 print('generator_losses', generator_losses[-1])
