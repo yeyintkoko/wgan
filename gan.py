@@ -70,7 +70,8 @@ def build_critic(num_conv, num_dense, time_step, num_features):
         multiplier = i + 1
         is_last_layer = multiplier == num_conv
         model.add(Conv1D(16 * multiplier, kernel_size=3, activation='leaky_relu'))
-        model.add(MaxPooling1D(pool_size=2))
+        if 16 * multiplier >= 128:
+            model.add(BatchNormalization())
         if is_last_layer:
             model.add(Flatten())
     for i in range(num_dense):
@@ -155,7 +156,7 @@ def train_gan(epochs, batch_size, X, y, num_samples, n_critic, clip_value, gan_l
             if patience_counter >= patience:
                 print("Early stopping triggered.")
                 return  # Exit the training loop
-    return (gan_model, generator, critic), (critic_losses, generator_losses)
+    return (gan_model, generator, critic), (critic_losses, generator_losses), best_g_loss
 
 # Generate New Price Series with context
 def generate_new_series_with_context(last_data, generate_num, time_step, num_features, gan_model, generator):
@@ -240,63 +241,66 @@ train_data, train_target = prepare_data(num_samples=num_samples, time_step=time_
 X = train_data
 y = train_target
 
-# generator = load_model('generator_model.keras') # load trained generator
-# critic = load_model('critic_model.keras') # load trained critic
-# gan_model = load_model('gan_model.keras') # load trained gan_model
+# This block will only execute when this file is run directly
+if __name__ == "__main__":
+    # generator = load_model('generator_model.keras') # load trained generator
+    # critic = load_model('critic_model.keras') # load trained critic
+    # gan_model = load_model('gan_model.keras') # load trained gan_model
 
-# Train the GAN
-(gan_model, generator, critic), (critic_losses, generator_losses) = train_gan(epochs=num_epoch, batch_size=batch_size, X=X, y=y, num_samples=num_samples, n_critic=n_critic, clip_value=clip_value, gan_lr=gan_lr, critic_lr=critic_lr, num_lstm=3, num_lstm_dense=3, num_conv=3, num_conv_dense=3, time_step=time_step, num_features=num_features)
+    # Train the GAN
+    (gan_model, generator, critic), (critic_losses, generator_losses), best_g_loss = train_gan(epochs=num_epoch, batch_size=batch_size, X=X, y=y, num_samples=num_samples, n_critic=n_critic, clip_value=clip_value, gan_lr=gan_lr, critic_lr=critic_lr, num_lstm=8, num_lstm_dense=5, num_conv=6, num_conv_dense=4, time_step=time_step, num_features=num_features)
 
-# Generate new price series
-last_sample = train_data[-1]
-last_sample = last_sample[1:]
-last_history = np.concatenate((last_sample, [features_test[0, :]]), axis=0)
+    # Generate new price series
+    last_sample = train_data[-1]
+    last_sample = last_sample[1:]
+    last_history = np.concatenate((last_sample, [features_test[0, :]]), axis=0)
 
-generate_num = len(target_test)
-# new_data = generate_new_series_with_context(last_history=last_history, generate_num=generate_num, time_step=time_step, num_features=num_features, gan_model=gan_model, generator=generator)
+    generate_num = len(target_test)
+    # new_data = generate_new_series_with_context(last_history=last_history, generate_num=generate_num, time_step=time_step, num_features=num_features, gan_model=gan_model, generator=generator)
 
-features_test_data = get_features_test_data(features_test, train_data[-1])
-new_data = gan_model.predict(features_test_data).flatten()
+    features_test_data = get_features_test_data(features_test, train_data[-1])
+    new_data = gan_model.predict(features_test_data).flatten()
 
-# Inverse transform to get the actual predicted price
-predict_origin = scaler_y.inverse_transform(new_data.reshape(-1, 1)).flatten()
-test_origin = scaler_y.inverse_transform(target_test.reshape(-1, 1)).flatten()
+    # Inverse transform to get the actual predicted price
+    predict_origin = scaler_y.inverse_transform(new_data.reshape(-1, 1)).flatten()
+    test_origin = scaler_y.inverse_transform(target_test.reshape(-1, 1)).flatten()
 
-def save_models():
-    generator.save('generator_model.keras')
-    critic.save('critic_model.keras')
-    gan_model.save('gan_model.keras')
+    def save_models():
+        generator.save('generator_model.keras')
+        critic.save('critic_model.keras')
+        gan_model.save('gan_model.keras')
 
-def plot_result():
-    # Plot generated price series
-    plt.figure(figsize=(10, 5))
-    plt.plot(new_data, label='Generated', alpha=0.3)
-    plt.plot(target_test, label='Real', alpha=0.7)  # Plot real prices
-    plt.legend()
-    plt.show()
+    def plot_result():
+        # Plot generated price series
+        plt.figure(figsize=(10, 5))
+        plt.plot(new_data, label='Generated', alpha=0.3)
+        plt.plot(target_test, label='Real', alpha=0.7)  # Plot real prices
+        plt.legend()
+        plt.show()
 
-def visualize_result():
-    generator.summary()
-    critic.summary()
-    gan_model.summary()
+    def visualize_result():
+        generator.summary()
+        critic.summary()
+        gan_model.summary()
 
-    print('batch_sizes', batch_sizes)
-    print('batch_size', batch_size)
-    print('time_step', time_step)
+        print('batch_sizes', batch_sizes)
+        print('batch_size', batch_size)
+        print('time_step', time_step)
 
-    print('new_data', new_data[-10:])
-    print('target_test', target_test[-10:])
+        print('new_data', new_data[-10:])
+        print('target_test', target_test[-10:])
 
-    print('critic_losses', critic_losses[-1])
-    print('generator_losses', generator_losses[-1])
+        print('critic_losses', critic_losses[-1])
+        print('generator_losses', generator_losses[-1])
 
-    print('predict_origin.shape', predict_origin.shape)
-    print('test_origin.shape', test_origin.shape)
+        print('predict_origin.shape', predict_origin.shape)
+        print('test_origin.shape', test_origin.shape)
 
-    # Call the evaluation function after generating new data
-    evaluate_model(target_test, new_data)
-    plot_loss(critic_losses, generator_losses)
-    plot_result()
+        # Call the evaluation function after generating new data
+        evaluate_model(target_test, new_data)
+        plot_loss(critic_losses, generator_losses)
+        plot_result()
 
-save_models()
-visualize_result()
+    save_models()
+    visualize_result()
+
