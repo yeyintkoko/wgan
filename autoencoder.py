@@ -13,6 +13,10 @@ def load_data():
     dataset = dataset[['price', 'ma7', '26ema', '12ema', 'upper_band', 'lower_band', 'ema', 'momentum']]
     dataset = dataset[::-1].reset_index(drop=True)
 
+    # Reduce the data to 50% for faster turning
+    num_reduce_days = int(dataset.shape[0]*.5)
+    dataset = dataset.iloc[num_reduce_days:]
+
     # Check for NaNs in the original dataset
     if dataset.isnull().values.any():
         print("NaN values found in the original dataset.")
@@ -67,7 +71,7 @@ num_features = X_train.shape[1]
 autoencoder, encoder = build_stacked_autoencoder((num_features,))
 
 # Train the autoencoder
-autoencoder.fit(X_train, X_train, epochs=400, batch_size=8, shuffle=True, validation_data=(X_test, X_test))
+autoencoder.fit(X_train, X_train, epochs=400, batch_size=8, verbose=0, shuffle=True, validation_data=(X_test, X_test))
 
 # Use encoder part of the autoencoder for feature selection
 encoded_features_train = encoder.predict(X_train)
@@ -113,3 +117,5 @@ def plot_result(predicted_data, real_data):
 
 # (y_test_original, y_pred_original), y_pred = perform_regression_test()
 # plot_result(y_pred_original, y_test_original)
+
+# pip freeze > requirements.txt
