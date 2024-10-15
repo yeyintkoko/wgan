@@ -252,7 +252,7 @@ if __name__ == "__main__":
 
     num_lstm = 3
     num_lstm_dense = 4
-    num_conv = 3
+    num_conv = 2
     num_conv_dense = 1
 
     # Train the GAN
@@ -306,7 +306,7 @@ if __name__ == "__main__":
 
         # Call the evaluation function after generating new data
         evaluate_model(target_test, new_data)
-        plot_loss(critic_losses, generator_losses)
+        # plot_loss(critic_losses, generator_losses)
         plot_result()
 
     save_models()
