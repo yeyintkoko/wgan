@@ -5,8 +5,8 @@ from gan import train_gan, X, y, num_samples, time_step, num_features
 def objective(trial):
     try:
         # Suggest hyperparameters
-        lrs = [1e-5, 2e-5, 3e-5, 4e-5, 5e-5, 6e-5, 7e-5, 8e-5, 9e-5, 1e-4, 2e-4, 3e-4, 4e-4, 5e-4, 6e-4, 7e-4, 8e-4, 9e-4, 1e-3]
-        num_hiddens = [16, 24, 32, 40, 48]
+        lrs = [1e-05, 2e-05, 1e-04, 2e-04]
+        num_hiddens = [16, 32, 64, 128]
         gan_lr = trial.suggest_categorical('gan_lr', lrs)
         critic_lr = trial.suggest_categorical('critic_lr', lrs)
         n_critic = trial.suggest_int('n_critic', 1, 20)
@@ -14,7 +14,7 @@ def objective(trial):
         num_lstm = trial.suggest_int('num_lstm', 1, 4)
         num_lstm_dense = trial.suggest_int('num_lstm_dense', 1, 6)
         num_conv = trial.suggest_int('num_conv', 1, 8)
-        num_conv_dense = trial.suggest_int('num_conv_dense', 1, 6)
+        num_conv_dense = trial.suggest_int('num_conv_dense', 1, 8)
         batch_size = 18
         num_epoch = 150
         num_lstm_hidden = trial.suggest_categorical('num_lstm_hidden', [32, 50, 64, 80, 100, 128, 150, 200, 256])
