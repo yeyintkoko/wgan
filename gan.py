@@ -106,7 +106,7 @@ def train_gan(epochs, batch_size, X, y, num_samples, n_critic, clip_value, gan_l
 
     # Initialize variables for early stopping and model checkpointing
     best_g_loss = float('inf')
-    patience = 3
+    patience = 5
     patience_counter = 0
     checkpoint_path = 'best_gan_model.keras'
     
@@ -243,20 +243,20 @@ y = train_target
 # This block will only execute when this file is run directly
 if __name__ == "__main__":
     # Learning rates
-    gan_lr = 1e-04
-    critic_lr = 1e-04
+    gan_lr = 1e-4
+    critic_lr = 1e-4
 
     n_critic = 2 # Number of training steps for the critic per generator step
     clip_value = 0.01
 
     num_lstm = 2
-    num_lstm_dense = 1
+    num_lstm_dense = 4
     num_lstm_base = 32
     num_lstm_hidden = 50
     num_conv = 4
-    num_conv_dense = 3
+    num_conv_dense = 2
     num_conv_base = 32
-    num_conv_dense_base = 16
+    num_conv_dense_base = 32
 
     # Load trained models
     gan_model = None #load_model('best_gan_model.keras') 
