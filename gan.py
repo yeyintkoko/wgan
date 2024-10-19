@@ -89,7 +89,7 @@ def build_gan(generator, critic, time_step, num_features):
     return model
 
 # Train the GAN
-def train_gan(epochs, batch_size, X, y, num_samples, n_critic, clip_value, gan_lr, critic_lr, num_lstm, num_lstm_dense, num_lstm_hidden, num_lstm_base, num_conv, num_conv_dense, num_conv_base, num_conv_dense_base, time_step, num_features, generator=None, critic=None, gan_model=None):
+def train_gan(epochs, batch_size, X, y, num_samples, n_critic, clip_value, gan_lr, critic_lr, num_lstm, num_lstm_dense, num_lstm_hidden, num_lstm_base, num_conv, num_conv_dense, num_conv_base, num_conv_dense_base, time_step, num_features, patience=5, generator=None, critic=None, gan_model=None):
     if generator is None:
         generator = build_generator(num_lstm=num_lstm, num_dense=num_lstm_dense, time_step=time_step, num_features=num_features, num_hidden=num_lstm_hidden, num_base=num_lstm_base)
     
@@ -106,7 +106,6 @@ def train_gan(epochs, batch_size, X, y, num_samples, n_critic, clip_value, gan_l
 
     # Initialize variables for early stopping and model checkpointing
     best_g_loss = float('inf')
-    patience = 5
     patience_counter = 0
     checkpoint_path = 'best_gan_model.keras'
     
@@ -231,7 +230,7 @@ target_test = y_test
 num_features = features_train.shape[1]
 
 time_step = 50
-num_epoch = 150
+num_epoch = 300
 
 reduce_index = 1
 num_samples, time_step, batch_size, batch_sizes = get_hyperparams(time_step=time_step, features_train=features_train, reduce_index=reduce_index)
@@ -248,23 +247,27 @@ if __name__ == "__main__":
 
     n_critic = 2 # Number of training steps for the critic per generator step
     clip_value = 0.01
+    patience = 15
 
     num_lstm = 2
-    num_lstm_dense = 4
-    num_lstm_base = 32
     num_lstm_hidden = 50
-    num_conv = 4
-    num_conv_dense = 2
+
+    num_lstm_dense = 4
+    num_lstm_base = 512
+    
+    num_conv = 2
     num_conv_base = 32
-    num_conv_dense_base = 32
+
+    num_conv_dense = 1
+    num_conv_dense_base = 64
 
     # Load trained models
-    gan_model = None #load_model('best_gan_model.keras') 
+    gan_model = None #load_model('best_gan_model.keras')
     generator = None #load_model('generator_model.keras')
     critic = None #load_model('critic_model.keras')
 
     # Train the GAN
-    (gan_model, generator, critic), (critic_losses, generator_losses), best_g_loss = train_gan(epochs=num_epoch, batch_size=batch_size, X=X, y=y, num_samples=num_samples, n_critic=n_critic, clip_value=clip_value, gan_lr=gan_lr, critic_lr=critic_lr, num_lstm=num_lstm, num_lstm_dense=num_lstm_dense, num_lstm_hidden=num_lstm_hidden, num_lstm_base=num_lstm_base, num_conv=num_conv, num_conv_dense=num_conv_dense, num_conv_base=num_conv_base, num_conv_dense_base=num_conv_dense_base, time_step=time_step, num_features=num_features, generator=generator, critic=critic, gan_model=gan_model)
+    (gan_model, generator, critic), (critic_losses, generator_losses), best_g_loss = train_gan(epochs=num_epoch, batch_size=batch_size, X=X, y=y, num_samples=num_samples, n_critic=n_critic, clip_value=clip_value, gan_lr=gan_lr, critic_lr=critic_lr, num_lstm=num_lstm, num_lstm_dense=num_lstm_dense, num_lstm_hidden=num_lstm_hidden, num_lstm_base=num_lstm_base, num_conv=num_conv, num_conv_dense=num_conv_dense, num_conv_base=num_conv_base, num_conv_dense_base=num_conv_dense_base, time_step=time_step, num_features=num_features, patience=patience, generator=generator, critic=critic, gan_model=gan_model)
     
 
     # Generate new price series
