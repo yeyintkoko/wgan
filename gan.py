@@ -242,24 +242,26 @@ y = train_target
 # This block will only execute when this file is run directly
 if __name__ == "__main__":
     # Learning rates
-    gan_lr = 1e-4
+    gan_lr = 5e-4
     critic_lr = 1e-4
 
-    n_critic = 2 # Number of training steps for the critic per generator step
+    n_critic = 5 # Number of training steps for the critic per generator step
     clip_value = 0.01
     patience = 15
-
-    num_lstm = 2
-    num_lstm_hidden = 50
-
-    num_lstm_dense = 4
-    num_lstm_base = 512
     
-    num_conv = 2
-    num_conv_base = 32
+    # LSTM
+    num_lstm = 2
+    num_lstm_hidden = 512
+
+    num_lstm_dense = 2
+    num_lstm_base = 256
+
+    # Critic
+    num_conv = 1
+    num_conv_base = 64
 
     num_conv_dense = 1
-    num_conv_dense_base = 64
+    num_conv_dense_base =32
 
     # Load trained models
     gan_model = None #load_model('best_gan_model.keras')
