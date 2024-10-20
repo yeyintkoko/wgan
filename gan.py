@@ -58,27 +58,27 @@ def build_generator(num_lstm, num_dense, time_step, num_features, num_base=16, n
     for i in range(num_dense):
         multiplier = i + 1
         model.add(Dense(num_base * (2**multiplier), activation='gelu'))
-    model.add(Dense(time_step * num_features, activation='linear'))  # Output layer
-    model.add(Reshape((time_step, num_features)))
+    model.add(Dense(1, activation='linear'))  # Output layer
+    model.add(Reshape((1, 1)))
     return model
 
 # Define the CNN Discriminator
 def build_critic(num_conv, num_dense, time_step, num_features, num_base_conv=16, num_base_dense=16):
-    model = Sequential()
-    model.add(Input(shape=(time_step, num_features)))
+    in_critic = Input(shape=(1, 1))
     for i in range(num_conv):
         multiplier = i + 1
         is_last_layer = multiplier == num_conv
-        model.add(Conv1D(num_base_conv * (2**multiplier), kernel_size=3, activation='leaky_relu'))
+        fe = Conv1D(num_base_conv * (2**multiplier), kernel_size=1, activation='leaky_relu')(in_critic)
         if 16 * multiplier >= 128:
-            model.add(BatchNormalization())
+            fe = BatchNormalization()(fe)
         if is_last_layer:
-            model.add(Flatten())
+            fe = Flatten()(fe)
     for i in range(num_dense):
         multiplier = i + 1
-        model.add(Dense(num_base_dense * (2**multiplier), activation='relu'))
-    model.add(Dense(1)) # No activation for critic
-    return model
+        fe = Dense(num_base_dense * (2**multiplier), activation='relu')(fe)
+    out1 = Dense(1)(fe) # No activation for critic
+    out2 = Dense(num_features)(fe)
+    return Model(in_critic, [out1, out2])
 
 # Build and compile the GAN
 def build_gan(generator, critic, time_step, num_features):
@@ -92,6 +92,7 @@ def build_gan(generator, critic, time_step, num_features):
 def train_gan(epochs, batch_size, X, y, num_samples, n_critic, clip_value, gan_lr, critic_lr, num_lstm, num_lstm_dense, num_lstm_hidden, num_lstm_base, num_conv, num_conv_dense, num_conv_base, num_conv_dense_base, time_step, num_features, patience=5, generator=None, critic=None, gan_model=None):
     if generator is None:
         generator = build_generator(num_lstm=num_lstm, num_dense=num_lstm_dense, time_step=time_step, num_features=num_features, num_hidden=num_lstm_hidden, num_base=num_lstm_base)
+    generator_optimizer = Adam(gan_lr)
     
     if critic is None:
         critic = build_critic(num_conv=num_conv, num_dense=num_conv_dense, time_step=time_step, num_features=num_features, num_base_conv=num_conv_base, num_base_dense=num_conv_dense_base)
@@ -99,7 +100,6 @@ def train_gan(epochs, batch_size, X, y, num_samples, n_critic, clip_value, gan_l
 
     if gan_model is None:
         gan_model = build_gan(generator, critic, time_step, num_features)
-    gan_optimizer = Adam(gan_lr)
 
     critic_losses = []
     generator_losses = []
@@ -114,15 +114,16 @@ def train_gan(epochs, batch_size, X, y, num_samples, n_critic, clip_value, gan_l
             idx = np.random.randint(0, num_samples, batch_size)
         
             # Real data
-            real_data = X[idx].reshape(-1, time_step, num_features)
+            train_data = X[idx].reshape(-1, time_step, num_features)
+            real_data = y[idx].reshape(-1, 1, 1)
 
             # Generate synthetic data
             noise = tf.random.normal(shape=(batch_size, time_step, num_features))
             fake_data = generator(noise)
 
             with tf.GradientTape() as tape:
-                real_loss = tf.reduce_mean(critic(real_data))
-                fake_loss = tf.reduce_mean(critic(fake_data))
+                real_loss = tf.reduce_mean(critic(real_data)[0])
+                fake_loss = tf.reduce_mean(critic(fake_data)[0])
                 c_loss = fake_loss - real_loss
             
             grads = tape.gradient(c_loss, critic.trainable_variables)
@@ -134,10 +135,10 @@ def train_gan(epochs, batch_size, X, y, num_samples, n_critic, clip_value, gan_l
 
         # Train Generator
         with tf.GradientTape() as tape:
-            g_loss = -tf.reduce_mean(gan_model(noise))
-
-        grads = tape.gradient(g_loss, gan_model.trainable_variables)
-        gan_optimizer.apply_gradients(zip(grads, gan_model.trainable_variables))
+            g_loss = -tf.reduce_mean(gan_model(train_data)[0])
+            
+        grads = tape.gradient(g_loss, generator.trainable_variables)
+        generator_optimizer.apply_gradients(zip(grads, generator.trainable_variables))
 
         critic_losses.append(c_loss.numpy())
         generator_losses.append(g_loss.numpy())
@@ -161,19 +162,19 @@ def train_gan(epochs, batch_size, X, y, num_samples, n_critic, clip_value, gan_l
     return (gan_model, generator, critic), (critic_losses, generator_losses), best_g_loss
 
 # Generate New Price Series with context
-def generate_new_series_with_context(last_data, generate_num, time_step, num_features, gan_model, generator):
+def generate_new_series_with_context(last_data, generate_num, time_step, num_features, gan_model):
     generated_series = []
 
     for _ in range(generate_num):
         context = last_data.reshape(1, time_step, num_features)
-        predicted_value = gan_model.predict(context)
+        prediction = gan_model.predict(context)
+        predicted_value = prediction[0]
 
         # Extract the new price
         predicted_price = predicted_value.reshape(1)[0]
 
         # Prepare features for the new history
-        new_features = generator.predict(context)
-        new_features = new_features[0, 0, :]
+        new_features = prediction[1]
 
         # noise = np.random.uniform(10, 300, num_features)
         # new_features = scaler_X.transform(noise.reshape(1, -1)).flatten()
@@ -184,7 +185,7 @@ def generate_new_series_with_context(last_data, generate_num, time_step, num_fea
 
         # Update last_data with the new generated price and dynamic features
         last_data = last_data[1:]
-        last_data = np.concatenate((last_data, [new_features]), axis=0)
+        last_data = np.concatenate((last_data, new_features), axis=0)
 
     return np.array(generated_series)
 
@@ -230,7 +231,7 @@ target_test = y_test
 num_features = features_train.shape[1]
 
 time_step = 50
-num_epoch = 300
+num_epoch = 150
 
 reduce_index = 1
 num_samples, time_step, batch_size, batch_sizes = get_hyperparams(time_step=time_step, features_train=features_train, reduce_index=reduce_index)
@@ -242,26 +243,26 @@ y = train_target
 # This block will only execute when this file is run directly
 if __name__ == "__main__":
     # Learning rates
-    gan_lr = 5e-4
+    gan_lr = 1e-3
     critic_lr = 1e-4
 
-    n_critic = 5 # Number of training steps for the critic per generator step
+    n_critic = 4 # Number of training steps for the critic per generator step
     clip_value = 0.01
-    patience = 15
+    patience = 150
     
     # LSTM
     num_lstm = 2
-    num_lstm_hidden = 512
+    num_lstm_hidden = 128
 
     num_lstm_dense = 2
-    num_lstm_base = 256
+    num_lstm_base = 64
 
     # Critic
-    num_conv = 1
-    num_conv_base = 64
+    num_conv = 2
+    num_conv_base = 128
 
-    num_conv_dense = 1
-    num_conv_dense_base =32
+    num_conv_dense = 2
+    num_conv_dense_base = 64
 
     # Load trained models
     gan_model = None #load_model('best_gan_model.keras')
@@ -278,10 +279,10 @@ if __name__ == "__main__":
     last_history = np.concatenate((last_sample, [features_test[0, :]]), axis=0)
 
     generate_num = len(target_test)
-    # new_data = generate_new_series_with_context(last_history=last_history, generate_num=generate_num, time_step=time_step, num_features=num_features, gan_model=gan_model, generator=generator)
+    # new_data = generate_new_series_with_context(last_data=last_history, generate_num=generate_num, time_step=time_step, num_features=num_features, gan_model=gan_model)
 
     features_test_data = get_features_test_data(features_test, train_data[-1])
-    new_data = gan_model.predict(features_test_data).flatten()
+    new_data = generator.predict(features_test_data).flatten()
 
     # Inverse transform to get the actual predicted price
     predict_origin = scaler_y.inverse_transform(new_data.reshape(-1, 1)).flatten()
