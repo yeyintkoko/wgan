@@ -55,6 +55,8 @@ def build_generator(num_lstm, num_dense, time_step, num_features, num_base=16, n
         not_last_layer = multiplier != num_lstm
         model.add(LSTM(num_hidden, return_sequences=not_last_layer))
         model.add(Dropout(0.2))
+    if num_lstm < 1:
+        model.add(Flatten())
     for i in range(num_dense):
         multiplier = i + 1
         model.add(Dense(num_base * (2**multiplier), activation='gelu'))
@@ -65,14 +67,13 @@ def build_generator(num_lstm, num_dense, time_step, num_features, num_base=16, n
 # Define the CNN Discriminator
 def build_critic(num_conv, num_dense, time_step, num_features, num_base_conv=16, num_base_dense=16):
     in_critic = Input(shape=(1, 1))
+    fe = in_critic
     for i in range(num_conv):
         multiplier = i + 1
-        is_last_layer = multiplier == num_conv
-        fe = Conv1D(num_base_conv * (2**multiplier), kernel_size=1, activation='leaky_relu')(in_critic)
-        if 16 * multiplier >= 128:
+        fe = Conv1D(num_base_conv * (2**multiplier), kernel_size=1, activation='leaky_relu')(fe)
+        if num_base_conv * (2**multiplier) >= 128:
             fe = BatchNormalization()(fe)
-        if is_last_layer:
-            fe = Flatten()(fe)
+    fe = Flatten()(fe)
     for i in range(num_dense):
         multiplier = i + 1
         fe = Dense(num_base_dense * (2**multiplier), activation='relu')(fe)
@@ -92,7 +93,6 @@ def build_gan(generator, critic, time_step, num_features):
 def train_gan(epochs, batch_size, X, y, num_samples, n_critic, clip_value, gan_lr, critic_lr, num_lstm, num_lstm_dense, num_lstm_hidden, num_lstm_base, num_conv, num_conv_dense, num_conv_base, num_conv_dense_base, time_step, num_features, patience=5, generator=None, critic=None, gan_model=None):
     if generator is None:
         generator = build_generator(num_lstm=num_lstm, num_dense=num_lstm_dense, time_step=time_step, num_features=num_features, num_hidden=num_lstm_hidden, num_base=num_lstm_base)
-    generator_optimizer = Adam(gan_lr)
     
     if critic is None:
         critic = build_critic(num_conv=num_conv, num_dense=num_conv_dense, time_step=time_step, num_features=num_features, num_base_conv=num_conv_base, num_base_dense=num_conv_dense_base)
@@ -100,6 +100,7 @@ def train_gan(epochs, batch_size, X, y, num_samples, n_critic, clip_value, gan_l
 
     if gan_model is None:
         gan_model = build_gan(generator, critic, time_step, num_features)
+    gan_optimizer = Adam(gan_lr)
 
     critic_losses = []
     generator_losses = []
@@ -135,10 +136,10 @@ def train_gan(epochs, batch_size, X, y, num_samples, n_critic, clip_value, gan_l
 
         # Train Generator
         with tf.GradientTape() as tape:
-            g_loss = -tf.reduce_mean(gan_model(train_data)[0])
+            g_loss = -tf.reduce_mean(gan_model(noise)[0])
             
-        grads = tape.gradient(g_loss, generator.trainable_variables)
-        generator_optimizer.apply_gradients(zip(grads, generator.trainable_variables))
+        grads = tape.gradient(g_loss, gan_model.trainable_variables)
+        gan_optimizer.apply_gradients(zip(grads, gan_model.trainable_variables))
 
         critic_losses.append(c_loss.numpy())
         generator_losses.append(g_loss.numpy())
@@ -231,7 +232,7 @@ target_test = y_test
 num_features = features_train.shape[1]
 
 time_step = 50
-num_epoch = 150
+num_epoch = 450
 
 reduce_index = 1
 num_samples, time_step, batch_size, batch_sizes = get_hyperparams(time_step=time_step, features_train=features_train, reduce_index=reduce_index)
@@ -243,10 +244,10 @@ y = train_target
 # This block will only execute when this file is run directly
 if __name__ == "__main__":
     # Learning rates
-    gan_lr = 1e-3
+    gan_lr = 1e-4
     critic_lr = 1e-4
 
-    n_critic = 4 # Number of training steps for the critic per generator step
+    n_critic = 2 # Number of training steps for the critic per generator step
     clip_value = 0.01
     patience = 150
     
@@ -254,15 +255,15 @@ if __name__ == "__main__":
     num_lstm = 2
     num_lstm_hidden = 128
 
-    num_lstm_dense = 2
+    num_lstm_dense = 4
     num_lstm_base = 64
 
     # Critic
     num_conv = 2
-    num_conv_base = 128
+    num_conv_base = 256
 
-    num_conv_dense = 2
-    num_conv_dense_base = 64
+    num_conv_dense = 4
+    num_conv_dense_base = 128
 
     # Load trained models
     gan_model = None #load_model('best_gan_model.keras')
