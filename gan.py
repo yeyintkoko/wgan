@@ -48,38 +48,37 @@ def prepare_data(num_samples, time_step, features_train, target_train):
 
 # Define the LSTM Generator
 def build_generator(num_lstm, num_dense, time_step, num_features, num_base=16, num_hidden=32):
-    model = Sequential()
-    model.add(Input(shape=(time_step, num_features)))
+    input = Input(shape=(time_step, num_features))
+    layer = input
     for i in range(num_lstm):
         multiplier = i + 1
         not_last_layer = multiplier != num_lstm
-        model.add(LSTM(num_hidden, return_sequences=not_last_layer))
-        model.add(Dropout(0.2))
+        layer = LSTM(num_hidden, return_sequences=not_last_layer)(layer)
+        layer = Dropout(0.2)(layer)
     if num_lstm < 1:
-        model.add(Flatten())
+        layer = Flatten()(layer)
     for i in range(num_dense):
         multiplier = i + 1
-        model.add(Dense(num_base * (2**multiplier), activation='gelu'))
-    model.add(Dense(1, activation='linear'))  # Output layer
-    model.add(Reshape((1, 1)))
-    return model
+        layer = Dense(num_base * (2**multiplier), activation='gelu')(layer)
+    output = Dense(time_step * num_features, activation='linear')(layer)  # Output layer
+    output = Reshape((time_step, num_features))(output)
+    return Model(input, output)
 
 # Define the CNN Discriminator
 def build_critic(num_conv, num_dense, time_step, num_features, num_base_conv=16, num_base_dense=16):
-    in_critic = Input(shape=(1, 1))
-    fe = in_critic
+    input = Input(shape=(time_step, num_features))
+    layer = input
     for i in range(num_conv):
         multiplier = i + 1
-        fe = Conv1D(num_base_conv * (2**multiplier), kernel_size=1, activation='leaky_relu')(fe)
+        layer = Conv1D(num_base_conv * (2**multiplier), kernel_size=1, activation='leaky_relu')(layer)
         if num_base_conv * (2**multiplier) >= 128:
-            fe = BatchNormalization()(fe)
-    fe = Flatten()(fe)
-    for i in range(num_dense):
+            layer = BatchNormalization()(layer)
+    layer = Flatten()(layer)
+    for i in range(num_dense - 1, -1, -1):
         multiplier = i + 1
-        fe = Dense(num_base_dense * (2**multiplier), activation='relu')(fe)
-    out1 = Dense(1)(fe) # No activation for critic
-    out2 = Dense(num_features)(fe)
-    return Model(in_critic, [out1, out2])
+        layer = Dense(num_base_dense * (2**multiplier), activation='relu')(layer)
+    output = Dense(1)(layer) # No activation for critic
+    return Model(input, output)
 
 # Build and compile the GAN
 def build_gan(generator, critic, time_step, num_features):
@@ -115,16 +114,16 @@ def train_gan(epochs, batch_size, X, y, num_samples, n_critic, clip_value, gan_l
             idx = np.random.randint(0, num_samples, batch_size)
         
             # Real data
-            train_data = X[idx].reshape(-1, time_step, num_features)
-            real_data = y[idx].reshape(-1, 1, 1)
+            real_data = X[idx].reshape(-1, time_step, num_features)
+            real_target = y[idx].reshape(-1, 1, 1)
 
             # Generate synthetic data
             noise = tf.random.normal(shape=(batch_size, time_step, num_features))
             fake_data = generator(noise)
 
             with tf.GradientTape() as tape:
-                real_loss = tf.reduce_mean(critic(real_data)[0])
-                fake_loss = tf.reduce_mean(critic(fake_data)[0])
+                real_loss = tf.reduce_mean(critic(real_data))
+                fake_loss = tf.reduce_mean(critic(fake_data))
                 c_loss = fake_loss - real_loss
             
             grads = tape.gradient(c_loss, critic.trainable_variables)
@@ -136,7 +135,7 @@ def train_gan(epochs, batch_size, X, y, num_samples, n_critic, clip_value, gan_l
 
         # Train Generator
         with tf.GradientTape() as tape:
-            g_loss = -tf.reduce_mean(gan_model(noise)[0])
+            g_loss = -tf.reduce_mean(gan_model(noise))
             
         grads = tape.gradient(g_loss, gan_model.trainable_variables)
         gan_optimizer.apply_gradients(zip(grads, gan_model.trainable_variables))
@@ -232,9 +231,9 @@ target_test = y_test
 num_features = features_train.shape[1]
 
 time_step = 50
-num_epoch = 450
+num_epoch = 150
 
-reduce_index = 1
+reduce_index = 0
 num_samples, time_step, batch_size, batch_sizes = get_hyperparams(time_step=time_step, features_train=features_train, reduce_index=reduce_index)
 
 train_data, train_target = prepare_data(num_samples=num_samples, time_step=time_step, features_train=features_train, target_train=target_train)
@@ -245,25 +244,25 @@ y = train_target
 if __name__ == "__main__":
     # Learning rates
     gan_lr = 1e-4
-    critic_lr = 1e-4
+    critic_lr = 1e-5
 
-    n_critic = 2 # Number of training steps for the critic per generator step
+    n_critic = 5 # Number of training steps for the critic per generator step
     clip_value = 0.01
     patience = 150
     
     # LSTM
-    num_lstm = 2
+    num_lstm = 0
     num_lstm_hidden = 128
 
     num_lstm_dense = 4
-    num_lstm_base = 64
+    num_lstm_base = 16
 
     # Critic
-    num_conv = 2
+    num_conv = 0
     num_conv_base = 256
 
-    num_conv_dense = 4
-    num_conv_dense_base = 128
+    num_conv_dense = 3
+    num_conv_dense_base = 16
 
     # Load trained models
     gan_model = None #load_model('best_gan_model.keras')
@@ -283,7 +282,7 @@ if __name__ == "__main__":
     # new_data = generate_new_series_with_context(last_data=last_history, generate_num=generate_num, time_step=time_step, num_features=num_features, gan_model=gan_model)
 
     features_test_data = get_features_test_data(features_test, train_data[-1])
-    new_data = generator.predict(features_test_data).flatten()
+    new_data = gan_model.predict(features_test_data).flatten()
 
     # Inverse transform to get the actual predicted price
     predict_origin = scaler_y.inverse_transform(new_data.reshape(-1, 1)).flatten()
