@@ -47,14 +47,13 @@ def prepare_data(num_samples, time_step, features_train, target_train):
     return train_data, train_target
 
 # Define the LSTM Generator
-def build_generator(num_lstm, num_dense, time_step, num_features, num_base=16, num_hidden=32):
+def build_generator(num_lstm, num_dense, time_step, num_features, num_base=16, num_hidden=32, dropout=0.2):
     input = Input(shape=(time_step, num_features))
     layer = input
     for i in range(num_lstm):
         multiplier = i + 1
         not_last_layer = multiplier != num_lstm
-        layer = LSTM(num_hidden, return_sequences=not_last_layer)(layer)
-        layer = Dropout(0.2)(layer)
+        layer = LSTM(num_hidden, return_sequences=not_last_layer, dropout=dropout, recurrent_dropout=dropout)(layer)
     if num_lstm < 1:
         layer = Flatten()(layer)
     for i in range(num_dense):
@@ -70,9 +69,8 @@ def build_critic(num_conv, num_dense, time_step, num_features, num_base_conv=16,
     layer = input
     for i in range(num_conv):
         multiplier = i + 1
-        layer = Conv1D(num_base_conv * (2**multiplier), kernel_size=1, activation='leaky_relu')(layer)
-        if num_base_conv * (2**multiplier) >= 128:
-            layer = BatchNormalization()(layer)
+        layer = Conv1D(num_base_conv * (2**multiplier), kernel_size=3, padding='same', activation='leaky_relu')(layer)
+    # layer = BatchNormalization()(layer)
     layer = Flatten()(layer)
     for i in range(num_dense - 1, -1, -1):
         multiplier = i + 1
@@ -89,9 +87,9 @@ def build_gan(generator, critic, time_step, num_features):
     return model
 
 # Train the GAN
-def train_gan(epochs, batch_size, X, y, num_samples, n_critic, clip_value, gan_lr, critic_lr, num_lstm, num_lstm_dense, num_lstm_hidden, num_lstm_base, num_conv, num_conv_dense, num_conv_base, num_conv_dense_base, time_step, num_features, patience=5, generator=None, critic=None, gan_model=None):
+def train_gan(epochs, batch_size, X, y, num_samples, n_critic, clip_value, gan_lr, critic_lr, num_lstm, num_lstm_dense, num_lstm_hidden, num_lstm_base, dropout, num_conv, num_conv_dense, num_conv_base, num_conv_dense_base, time_step, num_features, patience=5, generator=None, critic=None, gan_model=None):
     if generator is None:
-        generator = build_generator(num_lstm=num_lstm, num_dense=num_lstm_dense, time_step=time_step, num_features=num_features, num_hidden=num_lstm_hidden, num_base=num_lstm_base)
+        generator = build_generator(num_lstm=num_lstm, num_dense=num_lstm_dense, time_step=time_step, num_features=num_features, num_hidden=num_lstm_hidden, num_base=num_lstm_base, dropout=dropout)
     
     if critic is None:
         critic = build_critic(num_conv=num_conv, num_dense=num_conv_dense, time_step=time_step, num_features=num_features, num_base_conv=num_conv_base, num_base_dense=num_conv_dense_base)
@@ -231,7 +229,6 @@ target_test = y_test
 num_features = features_train.shape[1]
 
 time_step = 50
-num_epoch = 150
 
 reduce_index = 0
 num_samples, time_step, batch_size, batch_sizes = get_hyperparams(time_step=time_step, features_train=features_train, reduce_index=reduce_index)
@@ -244,25 +241,27 @@ y = train_target
 if __name__ == "__main__":
     # Learning rates
     gan_lr = 1e-4
-    critic_lr = 1e-5
+    critic_lr = 1e-4
 
     n_critic = 5 # Number of training steps for the critic per generator step
     clip_value = 0.01
-    patience = 150
+    patience = 50
+    num_epoch = 150
     
     # LSTM
-    num_lstm = 0
-    num_lstm_hidden = 128
+    num_lstm = 1
+    num_lstm_hidden = 50
 
-    num_lstm_dense = 4
-    num_lstm_base = 16
+    num_lstm_dense = 1
+    num_lstm_base = 32
+    dropout = 0.2
 
     # Critic
-    num_conv = 0
-    num_conv_base = 256
+    num_conv = 3
+    num_conv_base = 32
 
     num_conv_dense = 3
-    num_conv_dense_base = 16
+    num_conv_dense_base = 32
 
     # Load trained models
     gan_model = None #load_model('best_gan_model.keras')
@@ -270,7 +269,7 @@ if __name__ == "__main__":
     critic = None #load_model('critic_model.keras')
 
     # Train the GAN
-    (gan_model, generator, critic), (critic_losses, generator_losses), best_g_loss = train_gan(epochs=num_epoch, batch_size=batch_size, X=X, y=y, num_samples=num_samples, n_critic=n_critic, clip_value=clip_value, gan_lr=gan_lr, critic_lr=critic_lr, num_lstm=num_lstm, num_lstm_dense=num_lstm_dense, num_lstm_hidden=num_lstm_hidden, num_lstm_base=num_lstm_base, num_conv=num_conv, num_conv_dense=num_conv_dense, num_conv_base=num_conv_base, num_conv_dense_base=num_conv_dense_base, time_step=time_step, num_features=num_features, patience=patience, generator=generator, critic=critic, gan_model=gan_model)
+    (gan_model, generator, critic), (critic_losses, generator_losses), best_g_loss = train_gan(epochs=num_epoch, batch_size=batch_size, X=X, y=y, num_samples=num_samples, n_critic=n_critic, clip_value=clip_value, gan_lr=gan_lr, critic_lr=critic_lr, num_lstm=num_lstm, num_lstm_dense=num_lstm_dense, num_lstm_hidden=num_lstm_hidden, num_lstm_base=num_lstm_base, dropout=dropout, num_conv=num_conv, num_conv_dense=num_conv_dense, num_conv_base=num_conv_base, num_conv_dense_base=num_conv_dense_base, time_step=time_step, num_features=num_features, patience=patience, generator=generator, critic=critic, gan_model=gan_model)
     
 
     # Generate new price series
@@ -321,7 +320,7 @@ if __name__ == "__main__":
 
         # Call the evaluation function after generating new data
         evaluate_model(target_test, new_data)
-        plot_loss(critic_losses, generator_losses)
+        # plot_loss(critic_losses, generator_losses)
         plot_result()
 
     save_models()
