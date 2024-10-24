@@ -253,15 +253,15 @@ if __name__ == "__main__":
     num_lstm_hidden = 50
 
     num_lstm_dense = 3
-    num_lstm_base = 32
+    num_lstm_base = 64
     dropout = 0.2
 
     # Critic
-    num_conv = 4
+    num_conv = 2
     num_conv_base = 32
 
     num_conv_dense = 3
-    num_conv_dense_base = 32
+    num_conv_dense_base = 64
 
     # Load trained models
     gan_model = None #load_model('best_gan_model.keras')
