@@ -219,6 +219,9 @@ def plot_loss(critic_losses, generator_losses):
     plt.legend()
     plt.show()
 
+# Seed for reproducibility
+np.random.seed(42)
+
 features_train = encoded_features_train
 features_test = encoded_features_test
 
@@ -257,7 +260,7 @@ if __name__ == "__main__":
     dropout = 0.2
 
     # Critic
-    num_conv = 2
+    num_conv = 4
     num_conv_base = 32
 
     num_conv_dense = 3
@@ -320,7 +323,7 @@ if __name__ == "__main__":
 
         # Call the evaluation function after generating new data
         evaluate_model(target_test, new_data)
-        # plot_loss(critic_losses, generator_losses)
+        plot_loss(critic_losses, generator_losses)
         plot_result()
 
     save_models()
