@@ -246,7 +246,7 @@ if __name__ == "__main__":
     gan_lr = 2e-4
     critic_lr = 1e-4
 
-    n_critic = 6 # Number of training steps for the critic per generator step
+    n_critic = 5 # Number of training steps for the critic per generator step
     clip_value = 0.01
     patience = 50
     num_epoch = 150
@@ -255,15 +255,15 @@ if __name__ == "__main__":
     num_lstm = 1
     num_lstm_hidden = 50
 
-    num_lstm_dense = 3
+    num_lstm_dense = 4
     num_lstm_base = 64
     dropout = 0.2
 
     # Critic
-    num_conv = 4
-    num_conv_base = 32
+    num_conv = 2
+    num_conv_base = 64
 
-    num_conv_dense = 3
+    num_conv_dense = 1
     num_conv_dense_base = 64
 
     # Load trained models
