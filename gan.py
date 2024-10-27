@@ -113,7 +113,7 @@ def train_gan(epochs, batch_size, X, y, num_samples, n_critic, clip_value, gan_l
         
             # Real data
             real_data = X[idx].reshape(-1, time_step, num_features)
-            real_target = y[idx].reshape(-1, 1, 1)
+            real_target = y[idx].reshape(-1, 1)
 
             # Generate synthetic data
             noise = tf.random.normal(shape=(batch_size, time_step, num_features))
@@ -243,13 +243,13 @@ y = train_target
 # This block will only execute when this file is run directly
 if __name__ == "__main__":
     # Learning rates
-    gan_lr = 2e-4
-    critic_lr = 2e-4
+    gan_lr = 1e-4
+    critic_lr = 1e-4
 
-    n_critic = 4 # Number of training steps for the critic per generator step
+    n_critic = 5 # Number of training steps for the critic per generator step
     clip_value = 0.01
     patience = 50
-    num_epoch = 350
+    num_epoch = 150
     
     # LSTM
     num_lstm = 1
