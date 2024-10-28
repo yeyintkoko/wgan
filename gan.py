@@ -246,25 +246,25 @@ if __name__ == "__main__":
     gan_lr = 2e-4
     critic_lr = 2e-4
 
-    n_critic = 2 # Number of training steps for the critic per generator step
+    n_critic = 6 # Number of training steps for the critic per generator step
     clip_value = 0.01
     patience = 50
-    num_epoch = 350
+    num_epoch = 150
     
     # LSTM
-    num_lstm = 1
-    num_lstm_hidden = 50
+    num_lstm = 0
+    num_lstm_hidden = 16
 
     num_lstm_dense = 4
-    num_lstm_base = 64
+    num_lstm_base = 16
     dropout = 0.2
 
     # Critic
-    num_conv = 1
-    num_conv_base = 64
+    num_conv = 3
+    num_conv_base = 16
 
-    num_conv_dense = 2
-    num_conv_dense_base = 32
+    num_conv_dense = 0
+    num_conv_dense_base = 16
 
     # Load trained models
     gan_model = None #load_model('best_gan_model.keras')
@@ -323,7 +323,7 @@ if __name__ == "__main__":
 
         # Call the evaluation function after generating new data
         evaluate_model(target_test, new_data)
-        plot_loss(critic_losses, generator_losses)
+        # plot_loss(critic_losses, generator_losses)
         plot_result()
 
     save_models()
