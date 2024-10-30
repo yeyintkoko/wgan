@@ -58,19 +58,20 @@ def build_generator(num_lstm, num_dense, time_step, num_features, num_base=16, n
         layer = Flatten()(layer)
     for i in range(num_dense):
         multiplier = i + 1
-        layer = Dense(num_base * (2**multiplier), activation='gelu')(layer)
-    output = Dense(time_step * num_features, activation='linear')(layer)  # Output layer
-    output = Reshape((time_step, num_features))(output)
+        layer = Dense(num_base * (2**multiplier), activation='relu')(layer)
+        layer = BatchNormalization()(layer)
+    output = Dense(1, activation='linear')(layer)  # Output layer
+    output = Reshape((1, 1))(output)
     return Model(input, output)
 
 # Define the CNN Discriminator
 def build_critic(num_conv, num_dense, time_step, num_features, num_base_conv=16, num_base_dense=16):
-    input = Input(shape=(time_step, num_features))
+    input = Input(shape=(1, 1))
     layer = input
     for i in range(num_conv):
         multiplier = i + 1
         layer = Conv1D(num_base_conv * (2**multiplier), kernel_size=3, padding='same', activation='leaky_relu')(layer)
-    # layer = BatchNormalization()(layer)
+    layer = BatchNormalization()(layer)
     layer = Flatten()(layer)
     for i in range(num_dense - 1, -1, -1):
         multiplier = i + 1
@@ -112,8 +113,8 @@ def train_gan(epochs, batch_size, X, y, num_samples, n_critic, clip_value, gan_l
             idx = np.random.randint(0, num_samples, batch_size)
         
             # Real data
-            real_data = X[idx].reshape(-1, time_step, num_features)
-            real_target = y[idx].reshape(-1, 1)
+            train_data = X[idx].reshape(-1, time_step, num_features)
+            real_data = y[idx].reshape(-1, 1)
 
             # Generate synthetic data
             noise = tf.random.normal(shape=(batch_size, time_step, num_features))
@@ -122,7 +123,7 @@ def train_gan(epochs, batch_size, X, y, num_samples, n_critic, clip_value, gan_l
             with tf.GradientTape() as tape:
                 real_loss = tf.reduce_mean(critic(real_data))
                 fake_loss = tf.reduce_mean(critic(fake_data))
-                c_loss = fake_loss - real_loss
+                c_loss = real_loss - fake_loss
             
             grads = tape.gradient(c_loss, critic.trainable_variables)
             critic_optimizer.apply_gradients(zip(grads, critic.trainable_variables))
@@ -133,10 +134,10 @@ def train_gan(epochs, batch_size, X, y, num_samples, n_critic, clip_value, gan_l
 
         # Train Generator
         with tf.GradientTape() as tape:
-            g_loss = -tf.reduce_mean(gan_model(noise))
+            g_loss = -tf.reduce_mean(gan_model(train_data))
             
-        grads = tape.gradient(g_loss, gan_model.trainable_variables)
-        gan_optimizer.apply_gradients(zip(grads, gan_model.trainable_variables))
+        grads = tape.gradient(g_loss, generator.trainable_variables)
+        gan_optimizer.apply_gradients(zip(grads, generator.trainable_variables))
 
         critic_losses.append(c_loss.numpy())
         generator_losses.append(g_loss.numpy())
@@ -243,17 +244,17 @@ y = train_target
 # This block will only execute when this file is run directly
 if __name__ == "__main__":
     # Learning rates
-    gan_lr = 2e-4
-    critic_lr = 2e-4
+    gan_lr = 1e-4
+    critic_lr = 1e-5
 
-    n_critic = 6 # Number of training steps for the critic per generator step
+    n_critic = 3 # Number of training steps for the critic per generator step
     clip_value = 0.01
     patience = 50
-    num_epoch = 150
+    num_epoch = 450
     
     # LSTM
     num_lstm = 0
-    num_lstm_hidden = 16
+    num_lstm_hidden = 32
 
     num_lstm_dense = 4
     num_lstm_base = 16
@@ -284,7 +285,7 @@ if __name__ == "__main__":
     # new_data = generate_new_series_with_context(last_data=last_history, generate_num=generate_num, time_step=time_step, num_features=num_features, gan_model=gan_model)
 
     features_test_data = get_features_test_data(features_test, train_data[-1])
-    new_data = gan_model.predict(features_test_data).flatten()
+    new_data = generator.predict(features_test_data).flatten()
 
     # Inverse transform to get the actual predicted price
     predict_origin = scaler_y.inverse_transform(new_data.reshape(-1, 1)).flatten()
