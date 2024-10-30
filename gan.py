@@ -76,6 +76,7 @@ def build_critic(num_conv, num_dense, time_step, num_features, num_base_conv=16,
     for i in range(num_dense - 1, -1, -1):
         multiplier = i + 1
         layer = Dense(num_base_dense * (2**multiplier), activation='relu')(layer)
+        layer = BatchNormalization()(layer)
     output = Dense(1)(layer) # No activation for critic
     return Model(input, output)
 
@@ -244,13 +245,13 @@ y = train_target
 # This block will only execute when this file is run directly
 if __name__ == "__main__":
     # Learning rates
-    gan_lr = 1e-4
+    gan_lr = 2e-4
     critic_lr = 1e-5
 
-    n_critic = 3 # Number of training steps for the critic per generator step
+    n_critic = 2 # Number of training steps for the critic per generator step
     clip_value = 0.01
     patience = 50
-    num_epoch = 450
+    num_epoch = 850
     
     # LSTM
     num_lstm = 0
