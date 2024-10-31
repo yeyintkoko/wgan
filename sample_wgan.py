@@ -8,29 +8,27 @@ import matplotlib.pyplot as plt
 # Seed for reproducibility
 np.random.seed(42)
 
-# Generate synthetic time series data
-num_records = 1258
-num_features = 9
-
-# Create a random dataset
-data = np.random.rand(num_records, num_features)
-df = pd.DataFrame(data, columns=[f'feature_{i}' for i in range(num_features)])
+dataset = pd.read_csv("data/output.csv", header=0).dropna()
+dataset = dataset[['price', 'ma7', '26ema', '12ema', 'upper_band', 'lower_band', 'ema', 'momentum']]
+dataset = dataset[::-1].reset_index(drop=True)
 
 # Use the first feature as the target
-target = df['feature_0'].values
-features = df.drop(columns=['feature_0']).values
+features = np.array(dataset.iloc[:, :])
+target = np.array(dataset.iloc[:, 0])
+
+num_features = features.shape[1]
 
 # Split the data into training and testing sets
 X_train, X_test, y_train, y_test = train_test_split(features, target, test_size=0.3, random_state=42, shuffle=False)
 
 # Reshape the data for LSTM input
-X_train = X_train.reshape(-1, 1, 8)  # (samples, timesteps, features)
-X_test = X_test.reshape(-1, 1, 8)
+X_train = X_train.reshape(-1, 1, num_features)  # (samples, timesteps, features)
+X_test = X_test.reshape(-1, 1, num_features)
 
 # Generator
 def build_generator():
     model = tf.keras.Sequential([
-        layers.LSTM(64, activation='relu', return_sequences=True, input_shape=(1, 8)),
+        layers.LSTM(64, activation='relu', return_sequences=True, input_shape=(1, num_features)),
         layers.LSTM(32, activation='relu'),
         layers.Dense(1)  # Output 1D array
     ])
@@ -39,7 +37,7 @@ def build_generator():
 # Critic
 def build_critic():
     model = tf.keras.Sequential([
-        layers.Conv1D(64, kernel_size=2, strides=1, padding='same', input_shape=(1, 8)),
+        layers.Conv1D(64, kernel_size=2, strides=1, padding='same', input_shape=(1, num_features)),
         layers.LeakyReLU(alpha=0.2),
         layers.Conv1D(32, kernel_size=2, strides=1, padding='same'),
         layers.LeakyReLU(alpha=0.2),

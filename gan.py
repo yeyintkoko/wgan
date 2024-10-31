@@ -143,6 +143,11 @@ def train_gan(epochs, batch_size, X, y, num_samples, n_critic, clip_value, gan_l
         critic_losses.append(c_loss.numpy())
         generator_losses.append(g_loss.numpy())
 
+        if epoch % 50 == 0:
+            features_test_data = get_features_test_data(encoded_features_test, X[-1])
+            new_data = generator.predict(features_test_data).flatten()
+            plot_result(new_data, target_test)
+
         if epoch % 10 == 0:
             print(f'Epoch {epoch}, Discriminator Loss: {c_loss.numpy()}, Generator Loss: {g_loss.numpy()}')
 
@@ -265,7 +270,7 @@ target_test = y_test
 # Define sequence length and number of features
 num_features = features_train.shape[1]
 
-time_step = 50
+time_step = 150
 
 reduce_index = 0
 num_samples, time_step, batch_size, batch_sizes = get_hyperparams(time_step=time_step, features_train=features_train, reduce_index=reduce_index)
@@ -278,24 +283,24 @@ y = train_target
 if __name__ == "__main__":
     # Learning rates
     gan_lr = 2e-4
-    critic_lr = 1e-5
+    critic_lr = 5e-5
 
-    n_critic = 2 # Number of training steps for the critic per generator step
+    n_critic = 4 # Number of training steps for the critic per generator step
     clip_value = 0.01
     patience = 50
-    num_epoch = 650
+    num_epoch = 100
     
     # LSTM
     num_lstm = 0
     num_lstm_hidden = 32
 
     num_lstm_dense = 4
-    num_lstm_base = 16
+    num_lstm_base = 128
     dropout = 0.2
 
     # Critic
-    num_conv = 3
-    num_conv_base = 16
+    num_conv = 4
+    num_conv_base = 64
 
     num_conv_dense = 0
     num_conv_dense_base = 16
@@ -306,11 +311,10 @@ if __name__ == "__main__":
     critic = None #load_model('critic_model.keras')
     
     # plot_train(features_train, target_train)
-
+    
     # Train the GAN
     (gan_model, generator, critic), (critic_losses, generator_losses), best_g_loss = train_gan(epochs=num_epoch, batch_size=batch_size, X=X, y=y, num_samples=num_samples, n_critic=n_critic, clip_value=clip_value, gan_lr=gan_lr, critic_lr=critic_lr, num_lstm=num_lstm, num_lstm_dense=num_lstm_dense, num_lstm_hidden=num_lstm_hidden, num_lstm_base=num_lstm_base, dropout=dropout, num_conv=num_conv, num_conv_dense=num_conv_dense, num_conv_base=num_conv_base, num_conv_dense_base=num_conv_dense_base, time_step=time_step, num_features=num_features, patience=patience, generator=generator, critic=critic, gan_model=gan_model)
     
-
     # Generate new price series
     last_sample = train_data[-1]
     last_sample = last_sample[1:]

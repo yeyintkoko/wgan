@@ -18,7 +18,7 @@ num_training_days = int(dataset.shape[0] * 0.7)
 train_data, test_data = dataset[:num_training_days], dataset[num_training_days:]
 
 # Extract multiple features, assuming 'price' and 'MACD' are columns in the dataset
-data = dataset[['price', 'MACD']].values  # Adjust based on your actual features
+data = dataset[['price', 'ma7', '26ema', '12ema', 'upper_band', 'lower_band', 'ema', 'momentum']].values  # Adjust based on your actual features
 
 def create_dataset(data, time_step=1):
     X, y = [], []
@@ -44,7 +44,7 @@ model.add(Dense(1))  # Output layer for price prediction
 model.compile(optimizer='adam', loss='mean_squared_error')
 
 # Fit the model
-model.fit(X, y, epochs=100, batch_size=32)
+model.fit(X, y, epochs=500, batch_size=32, verbose=0)
 
 # Starting point for the generation
 last_sequence = data[-time_step:].reshape(1, time_step, data.shape[1])  # Shape: (1, time_step, num_features)
@@ -57,7 +57,7 @@ num_generate = len(test_data)  # Number of new data points to generate
 
 for _ in range(num_generate):
     # Get the next predicted value
-    next_value = model.predict(last_sequence)  # Shape: (1, 1)
+    next_value = model.predict(last_sequence, verbose=0)  # Shape: (1, 1)
     
     print(f"Predicted next_value shape: {next_value.shape}, value: {next_value}")
 
