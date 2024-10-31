@@ -221,6 +221,38 @@ def plot_loss(critic_losses, generator_losses):
     plt.legend()
     plt.show()
 
+def plot_train(features_train, target_train):
+    plt.figure(figsize=(10, 5))
+    plt.subplot(2, 1, 1)
+    plt.plot(features_train)
+    plt.title('Train Data')
+
+    plt.subplot(2, 1, 2)
+    plt.plot(target_train)
+    plt.title('Train Target')
+
+    plt.show()
+
+def plot_test(features_test, target_test):
+    plt.figure(figsize=(10, 5))
+    plt.subplot(2, 1, 1)
+    plt.plot(features_test)
+    plt.title('Test Data')
+
+    plt.subplot(2, 1, 2)
+    plt.plot(target_test)
+    plt.title('Test Target')
+
+    plt.show()
+
+def plot_result(generated_data, real_data):
+    # Plot generated price series
+    plt.figure(figsize=(10, 5))
+    plt.plot(generated_data, label='Generated', alpha=0.3)
+    plt.plot(real_data, label='Real', alpha=0.7)  # Plot real prices
+    plt.legend()
+    plt.show()
+
 # Seed for reproducibility
 np.random.seed(42)
 
@@ -251,7 +283,7 @@ if __name__ == "__main__":
     n_critic = 2 # Number of training steps for the critic per generator step
     clip_value = 0.01
     patience = 50
-    num_epoch = 850
+    num_epoch = 650
     
     # LSTM
     num_lstm = 0
@@ -272,6 +304,8 @@ if __name__ == "__main__":
     gan_model = None #load_model('best_gan_model.keras')
     generator = None #load_model('generator_model.keras')
     critic = None #load_model('critic_model.keras')
+    
+    # plot_train(features_train, target_train)
 
     # Train the GAN
     (gan_model, generator, critic), (critic_losses, generator_losses), best_g_loss = train_gan(epochs=num_epoch, batch_size=batch_size, X=X, y=y, num_samples=num_samples, n_critic=n_critic, clip_value=clip_value, gan_lr=gan_lr, critic_lr=critic_lr, num_lstm=num_lstm, num_lstm_dense=num_lstm_dense, num_lstm_hidden=num_lstm_hidden, num_lstm_base=num_lstm_base, dropout=dropout, num_conv=num_conv, num_conv_dense=num_conv_dense, num_conv_base=num_conv_base, num_conv_dense_base=num_conv_dense_base, time_step=time_step, num_features=num_features, patience=patience, generator=generator, critic=critic, gan_model=gan_model)
@@ -297,14 +331,6 @@ if __name__ == "__main__":
         critic.save('critic_model.keras')
         gan_model.save('gan_model.keras')
 
-    def plot_result():
-        # Plot generated price series
-        plt.figure(figsize=(10, 5))
-        plt.plot(new_data, label='Generated', alpha=0.3)
-        plt.plot(target_test, label='Real', alpha=0.7)  # Plot real prices
-        plt.legend()
-        plt.show()
-
     def visualize_result():
         generator.summary()
         critic.summary()
@@ -325,8 +351,11 @@ if __name__ == "__main__":
 
         # Call the evaluation function after generating new data
         evaluate_model(target_test, new_data)
+
+        # plot_train(features_train, target_train)
+        # plot_test(features_test, target_test)
         # plot_loss(critic_losses, generator_losses)
-        plot_result()
+        plot_result(new_data, target_test)
 
     save_models()
     visualize_result()
