@@ -143,7 +143,7 @@ def train_gan(epochs, batch_size, X, y, num_samples, n_critic, clip_value, gan_l
         critic_losses.append(c_loss.numpy())
         generator_losses.append(g_loss.numpy())
 
-        if epoch % 50 == 0:
+        if epoch % 10 == 0:
             features_test_data = get_features_test_data(encoded_features_test, X[-1])
             new_data = generator.predict(features_test_data).flatten()
             plot_result(new_data, target_test)
@@ -282,24 +282,24 @@ y = train_target
 # This block will only execute when this file is run directly
 if __name__ == "__main__":
     # Learning rates
-    gan_lr = 2e-4
-    critic_lr = 5e-5
+    gan_lr = 1e-3
+    critic_lr = 1e-4
 
-    n_critic = 4 # Number of training steps for the critic per generator step
+    n_critic = 5 # Number of training steps for the critic per generator step
     clip_value = 0.01
     patience = 50
-    num_epoch = 100
+    num_epoch = 150
     
     # LSTM
     num_lstm = 0
-    num_lstm_hidden = 32
+    num_lstm_hidden = 16
 
-    num_lstm_dense = 4
-    num_lstm_base = 128
+    num_lstm_dense = 2
+    num_lstm_base = 64
     dropout = 0.2
 
     # Critic
-    num_conv = 4
+    num_conv = 3
     num_conv_base = 64
 
     num_conv_dense = 0
