@@ -58,7 +58,7 @@ def build_generator(num_lstm, num_dense, time_step, num_features, num_base=16, n
         layer = Flatten()(layer)
     for i in range(num_dense):
         multiplier = i + 1
-        layer = Dense(num_base * (2**multiplier), activation='relu')(layer)
+        layer = Dense(num_base * (2**multiplier), activation='gelu')(layer)
         layer = BatchNormalization()(layer)
     output = Dense(1, activation='linear')(layer)  # Output layer
     output = Reshape((1, 1))(output)
@@ -71,7 +71,7 @@ def build_critic(num_conv, num_dense, time_step, num_features, num_base_conv=16,
     for i in range(num_conv):
         multiplier = i + 1
         layer = Conv1D(num_base_conv * (2**multiplier), kernel_size=3, padding='same', activation='leaky_relu')(layer)
-    layer = BatchNormalization()(layer)
+        layer = BatchNormalization()(layer)
     layer = Flatten()(layer)
     for i in range(num_dense - 1, -1, -1):
         multiplier = i + 1
@@ -124,7 +124,7 @@ def train_gan(epochs, batch_size, X, y, num_samples, n_critic, clip_value, gan_l
             with tf.GradientTape() as tape:
                 real_loss = tf.reduce_mean(critic(real_data))
                 fake_loss = tf.reduce_mean(critic(fake_data))
-                c_loss = real_loss - fake_loss
+                c_loss = fake_loss - real_loss
             
             grads = tape.gradient(c_loss, critic.trainable_variables)
             critic_optimizer.apply_gradients(zip(grads, critic.trainable_variables))
@@ -288,7 +288,7 @@ if __name__ == "__main__":
     n_critic = 5 # Number of training steps for the critic per generator step
     clip_value = 0.01
     patience = 50
-    num_epoch = 150
+    num_epoch = 350
     
     # LSTM
     num_lstm = 0
@@ -299,11 +299,11 @@ if __name__ == "__main__":
     dropout = 0.2
 
     # Critic
-    num_conv = 3
+    num_conv = 0
     num_conv_base = 64
 
-    num_conv_dense = 0
-    num_conv_dense_base = 16
+    num_conv_dense = 2
+    num_conv_dense_base = 64
 
     # Load trained models
     gan_model = None #load_model('best_gan_model.keras')
