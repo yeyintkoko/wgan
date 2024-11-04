@@ -89,7 +89,7 @@ def build_gan(generator, critic, time_step, num_features):
     return model
 
 # Train the GAN
-def train_gan(epochs, batch_size, X, y, num_samples, n_critic, clip_value, gan_lr, critic_lr, num_lstm, num_lstm_dense, num_lstm_hidden, num_lstm_base, dropout, num_conv, num_conv_dense, num_conv_base, num_conv_dense_base, time_step, num_features, patience=5, mape_patience=5, generator=None, critic=None, gan_model=None):
+def train_gan(epochs, batch_size, X, y, num_samples, n_critic, clip_value, gan_lr, critic_lr, num_lstm, num_lstm_dense, num_lstm_hidden, num_lstm_base, dropout, num_conv, num_conv_dense, num_conv_base, num_conv_dense_base, time_step, num_features, patience=5, mape_patience=5, plot_epoch_interval=50, generator=None, critic=None, gan_model=None):
     if generator is None:
         generator = build_generator(num_lstm=num_lstm, num_dense=num_lstm_dense, time_step=time_step, num_features=num_features, num_hidden=num_lstm_hidden, num_base=num_lstm_base, dropout=dropout)
     
@@ -111,7 +111,11 @@ def train_gan(epochs, batch_size, X, y, num_samples, n_critic, clip_value, gan_l
 
     best_mape = float('inf')
     mape_patience_counter = 0
-    
+    plot_epoch = False
+    best_epoch = 0
+    early_stop_triggered = False
+    mape_patience_hitted = False
+
     for epoch in range(epochs):
         for _ in range(n_critic):
             idx = np.random.randint(0, num_samples, batch_size)
@@ -146,23 +150,37 @@ def train_gan(epochs, batch_size, X, y, num_samples, n_critic, clip_value, gan_l
         critic_losses.append(c_loss.numpy())
         generator_losses.append(g_loss.numpy())
 
-        if epoch % 150 == 0:
+        if epoch % plot_epoch_interval == 0:
             features_test_data = get_features_test_data(encoded_features_test, X[-1])
             new_data = generator.predict(features_test_data).flatten()
             mape = evaluate_model(target_test, new_data)
-            plot_result(new_data, target_test)
+            if mape < 30:
+                mape_patience_counter = 0
+            else:
+                plot_epoch = False
+
+            if mape < 20:
+                plot_epoch = True
+                plot_epoch_interval = 50
+            if plot_epoch:
+                plot_result(new_data, target_test, epoch)
 
             if mape < best_mape:
                 print(f"MAPE% improved: {best_mape - mape}")
+                generator.save(checkpoint_path)  # Save the model
                 best_mape = mape
+                best_epoch = epoch
                 mape_patience_counter = 0
             else:
                 mape_patience_counter += 1
                 
             # Early stopping logic: MAPE patience counter
             if mape_patience_counter >= mape_patience:
+                mape_patience_hitted = True
+                print(f'best_mape {best_mape} at epoch {best_epoch}')
                 print("MAPE patience hit.")
-                return  # Exit the training loop
+                # Exit the training loop
+                return (gan_model, generator, critic), (critic_losses, generator_losses), (best_g_loss, best_mape, best_epoch), (early_stop_triggered, mape_patience_hitted)
 
         if epoch % 10 == 0:
             print(f'Epoch {epoch}, Discriminator Loss: {c_loss.numpy()}, Generator Loss: {g_loss.numpy()}')
@@ -171,16 +189,19 @@ def train_gan(epochs, batch_size, X, y, num_samples, n_critic, clip_value, gan_l
             if g_loss < best_g_loss:
                 best_g_loss = g_loss
                 patience_counter = 0
-                gan_model.save(checkpoint_path)  # Save the model
+                generator.save(checkpoint_path)  # Save the model
                 print("Model improved and saved.")
             else:
                 patience_counter += 1
             
             # Early stopping logic
             if patience_counter >= patience:
+                early_stop_triggered = True
                 print("Early stopping triggered.")
-                return  # Exit the training loop
-    return (gan_model, generator, critic), (critic_losses, generator_losses), best_g_loss
+                # Exit the training loop
+                return (gan_model, generator, critic), (critic_losses, generator_losses), (best_g_loss, best_mape, best_epoch), (early_stop_triggered, mape_patience_hitted)
+
+    return (gan_model, generator, critic), (critic_losses, generator_losses), (best_g_loss, best_mape, best_epoch), (early_stop_triggered, mape_patience_hitted)
 
 # Generate New Price Series with context
 def generate_new_series_with_context(last_data, generate_num, time_step, num_features, gan_model):
@@ -267,11 +288,13 @@ def plot_test(features_test, target_test):
 
     plt.show()
 
-def plot_result(generated_data, real_data):
+def plot_result(generated_data, real_data, epoch=None):
     # Plot generated price series
     plt.figure(figsize=(10, 5))
     plt.plot(generated_data, label='Generated', alpha=0.3)
     plt.plot(real_data, label='Real', alpha=0.7)  # Plot real prices
+    if epoch:
+        plt.title(f'Epoch {epoch}')
     plt.legend()
     plt.show()
 
@@ -299,14 +322,16 @@ y = train_target
 # This block will only execute when this file is run directly
 if __name__ == "__main__":
     # Learning rates
-    gan_lr = 1e-4
-    critic_lr = 1e-5
+    gan_lr = 1e-5
+    critic_lr = 1e-6
 
     n_critic = 5 # Number of training steps for the critic per generator step
     clip_value = 0.01
-    patience = 50
+
+    patience = 100
     mape_patience = 3
-    num_epoch = 1500
+    plot_epoch_interval = 150
+    num_epoch = 6500
     
     # LSTM
     num_lstm = 0
@@ -329,9 +354,20 @@ if __name__ == "__main__":
     critic = None #load_model('critic_model.keras')
     
     # plot_train(features_train, target_train)
+
+    def automate_train():
+        models, losses, bests, breaks = train_gan(epochs=num_epoch, batch_size=batch_size, X=X, y=y, num_samples=num_samples, n_critic=n_critic, clip_value=clip_value, gan_lr=gan_lr, critic_lr=critic_lr, num_lstm=num_lstm, num_lstm_dense=num_lstm_dense, num_lstm_hidden=num_lstm_hidden, num_lstm_base=num_lstm_base, dropout=dropout, num_conv=num_conv, num_conv_dense=num_conv_dense, num_conv_base=num_conv_base, num_conv_dense_base=num_conv_dense_base, time_step=time_step, num_features=num_features, patience=patience, mape_patience=mape_patience, plot_epoch_interval=plot_epoch_interval, generator=generator, critic=critic, gan_model=gan_model)
+        (early_stop_triggered, mape_patience_hitted) = breaks
+        if early_stop_triggered:
+            print('💥💣🧨🔥 early_stop_triggered 🔥🧨💣💥')
+        if mape_patience_hitted:
+            print('💥💣🧨🔥 mape_patience_hitted 🔥🧨💣💥')
+        if early_stop_triggered or mape_patience_hitted:
+            automate_train()
+        return models, losses, bests, breaks
     
     # Train the GAN
-    (gan_model, generator, critic), (critic_losses, generator_losses), best_g_loss = train_gan(epochs=num_epoch, batch_size=batch_size, X=X, y=y, num_samples=num_samples, n_critic=n_critic, clip_value=clip_value, gan_lr=gan_lr, critic_lr=critic_lr, num_lstm=num_lstm, num_lstm_dense=num_lstm_dense, num_lstm_hidden=num_lstm_hidden, num_lstm_base=num_lstm_base, dropout=dropout, num_conv=num_conv, num_conv_dense=num_conv_dense, num_conv_base=num_conv_base, num_conv_dense_base=num_conv_dense_base, time_step=time_step, num_features=num_features, patience=patience, mape_patience=mape_patience, generator=generator, critic=critic, gan_model=gan_model)
+    (gan_model, generator, critic), (critic_losses, generator_losses), (best_g_loss, best_mape, best_epoch), (early_stop_triggered, mape_patience_hitted) = automate_train()
     
     # Generate new price series
     last_sample = train_data[-1]
@@ -376,6 +412,8 @@ if __name__ == "__main__":
 
         print('predict_origin.shape', predict_origin.shape)
         print('test_origin.shape', test_origin.shape)
+
+        print(f'best_mape {best_mape} at epoch {best_epoch}')
 
         # Call the evaluation function after generating new data
         evaluate_model(target_test, new_data)
