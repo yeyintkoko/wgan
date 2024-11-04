@@ -127,7 +127,7 @@ def train_gan(epochs, batch_size, X, y, num_samples, n_critic, clip_value, gan_l
             with tf.GradientTape() as tape:
                 real_loss = tf.reduce_mean(critic(real_data))
                 fake_loss = tf.reduce_mean(critic(fake_data))
-                c_loss = real_loss - fake_loss
+                c_loss = fake_loss - real_loss
             
             grads = tape.gradient(c_loss, critic.trainable_variables)
             critic_optimizer.apply_gradients(zip(grads, critic.trainable_variables))
@@ -146,7 +146,7 @@ def train_gan(epochs, batch_size, X, y, num_samples, n_critic, clip_value, gan_l
         critic_losses.append(c_loss.numpy())
         generator_losses.append(g_loss.numpy())
 
-        if epoch % 10 == 0:
+        if epoch % 150 == 0:
             features_test_data = get_features_test_data(encoded_features_test, X[-1])
             new_data = generator.predict(features_test_data).flatten()
             mape = evaluate_model(target_test, new_data)
@@ -299,14 +299,14 @@ y = train_target
 # This block will only execute when this file is run directly
 if __name__ == "__main__":
     # Learning rates
-    gan_lr = 1e-3
-    critic_lr = 1e-4
+    gan_lr = 1e-4
+    critic_lr = 1e-5
 
     n_critic = 5 # Number of training steps for the critic per generator step
     clip_value = 0.01
     patience = 50
     mape_patience = 3
-    num_epoch = 350
+    num_epoch = 1500
     
     # LSTM
     num_lstm = 0
@@ -367,6 +367,12 @@ if __name__ == "__main__":
 
         print('critic_losses', critic_losses[-1])
         print('generator_losses', generator_losses[-1])
+
+        print('features_train.shape', features_train.shape)
+        print('target_train.shape', target_train.shape)
+
+        print('new_data.shape', new_data.shape)
+        print('target_test.shape', target_test.shape)
 
         print('predict_origin.shape', predict_origin.shape)
         print('test_origin.shape', test_origin.shape)
