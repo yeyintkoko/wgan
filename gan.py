@@ -161,7 +161,7 @@ def train_gan(epochs, batch_size, X, y, num_samples, n_critic, clip_value, gan_l
 
             if mape < 20:
                 plot_epoch = True
-                plot_epoch_interval = 50
+                plot_epoch_interval = 50 if plot_epoch_interval > 50 else plot_epoch_interval
             if plot_epoch:
                 plot_result(new_data, target_test, epoch)
 
@@ -322,16 +322,16 @@ y = train_target
 # This block will only execute when this file is run directly
 if __name__ == "__main__":
     # Learning rates
-    gan_lr = 1e-5
-    critic_lr = 1e-6
+    gan_lr = 1e-3
+    critic_lr = 1e-4
 
     n_critic = 5 # Number of training steps for the critic per generator step
     clip_value = 0.01
 
-    patience = 100
+    patience = 50
     mape_patience = 3
-    plot_epoch_interval = 150
-    num_epoch = 6500
+    plot_epoch_interval = 10
+    num_epoch = 500
     
     # LSTM
     num_lstm = 0
