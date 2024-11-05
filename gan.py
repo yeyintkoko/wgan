@@ -53,10 +53,10 @@ def build_generator(num_lstm, num_dense, time_step, num_features, num_base=16, n
     for i in range(num_lstm):
         multiplier = i + 1
         not_last_layer = multiplier != num_lstm
-        layer = LSTM(num_hidden, return_sequences=not_last_layer, dropout=dropout, recurrent_dropout=dropout)(layer)
+        layer = LSTM(num_hidden, return_sequences=not_last_layer, dropout=dropout)(layer)
     if num_lstm < 1:
         layer = Flatten()(layer)
-    for i in range(num_dense):
+    for i in range(num_dense - 1, -1, -1):
         multiplier = i + 1
         layer = Dense(num_base * (2**multiplier), activation='gelu')(layer)
         layer = BatchNormalization()(layer)
@@ -68,7 +68,7 @@ def build_generator(num_lstm, num_dense, time_step, num_features, num_base=16, n
 def build_critic(num_conv, num_dense, time_step, num_features, num_base_conv=16, num_base_dense=16):
     input = Input(shape=(1, 1))
     layer = input
-    for i in range(num_conv):
+    for i in range(num_conv - 1, -1, -1):
         multiplier = i + 1
         layer = Conv1D(num_base_conv * (2**multiplier), kernel_size=3, padding='same', activation='leaky_relu')(layer)
         layer = BatchNormalization()(layer)
@@ -89,7 +89,7 @@ def build_gan(generator, critic, time_step, num_features):
     return model
 
 # Train the GAN
-def train_gan(epochs, batch_size, X, y, num_samples, n_critic, clip_value, gan_lr, critic_lr, num_lstm, num_lstm_dense, num_lstm_hidden, num_lstm_base, dropout, num_conv, num_conv_dense, num_conv_base, num_conv_dense_base, time_step, num_features, patience=5, mape_patience=5, plot_epoch_interval=50, generator=None, critic=None, gan_model=None):
+def train_gan(epochs, batch_size, X, y, num_samples, n_critic, clip_value, gan_lr, critic_lr, num_lstm, num_lstm_dense, num_lstm_hidden, num_lstm_base, dropout, num_conv, num_conv_dense, num_conv_base, num_conv_dense_base, time_step, num_features, patience=5, mape_patience=5, mape_epoch_interval=50, mape_patience_threshold=30, mape_plot_threshold=20, low_mape_epoch_interval=50, generator=None, critic=None, gan_model=None):
     if generator is None:
         generator = build_generator(num_lstm=num_lstm, num_dense=num_lstm_dense, time_step=time_step, num_features=num_features, num_hidden=num_lstm_hidden, num_base=num_lstm_base, dropout=dropout)
     
@@ -122,7 +122,7 @@ def train_gan(epochs, batch_size, X, y, num_samples, n_critic, clip_value, gan_l
         
             # Real data
             train_data = X[idx].reshape(-1, time_step, num_features)
-            real_data = y[idx].reshape(-1, 1)
+            real_data = y[idx].reshape(-1, 1, 1)
 
             # Generate synthetic data
             noise = tf.random.normal(shape=(batch_size, time_step, num_features))
@@ -150,18 +150,18 @@ def train_gan(epochs, batch_size, X, y, num_samples, n_critic, clip_value, gan_l
         critic_losses.append(c_loss.numpy())
         generator_losses.append(g_loss.numpy())
 
-        if epoch % plot_epoch_interval == 0:
+        if epoch % mape_epoch_interval == 0:
             features_test_data = get_features_test_data(encoded_features_test, X[-1])
             new_data = generator.predict(features_test_data).flatten()
             mape = evaluate_model(target_test, new_data)
-            if mape < 30:
+            if mape < mape_patience_threshold:
                 mape_patience_counter = 0
             else:
                 plot_epoch = False
-
-            if mape < 20:
+            
+            if not mape_plot_threshold or mape < mape_plot_threshold:
                 plot_epoch = True
-                plot_epoch_interval = 50 if plot_epoch_interval > 50 else plot_epoch_interval
+                mape_epoch_interval = low_mape_epoch_interval
             if plot_epoch:
                 plot_result(new_data, target_test, epoch)
 
@@ -321,17 +321,21 @@ y = train_target
 
 # This block will only execute when this file is run directly
 if __name__ == "__main__":
+
+    patience = 50
+    mape_patience = 3
+    mape_epoch_interval = 10 # MAPE will be check on this inverval of epoch
+    mape_patience_threshold = 30 # While mape get lower than this value, mape break will be disabled
+    mape_plot_threshold = 0 # A flag to show preview plot will be set when mape passed down this value, then the preview will be shown on every next mape_epoch_interval. Setting this value to 0 will show preview on every mape_epoch_interval regardless of mape value.
+    low_mape_epoch_interval = 10 #50 # Reduce mape_epoch_interval to this value to check MAPE more often when the result get closer to actual
+    num_epoch = 500
+
     # Learning rates
     gan_lr = 1e-3
     critic_lr = 1e-4
 
-    n_critic = 5 # Number of training steps for the critic per generator step
+    n_critic = 3 # Number of training steps for the critic per generator step
     clip_value = 0.01
-
-    patience = 50
-    mape_patience = 3
-    plot_epoch_interval = 10
-    num_epoch = 500
     
     # LSTM
     num_lstm = 0
@@ -356,14 +360,14 @@ if __name__ == "__main__":
     # plot_train(features_train, target_train)
 
     def automate_train():
-        models, losses, bests, breaks = train_gan(epochs=num_epoch, batch_size=batch_size, X=X, y=y, num_samples=num_samples, n_critic=n_critic, clip_value=clip_value, gan_lr=gan_lr, critic_lr=critic_lr, num_lstm=num_lstm, num_lstm_dense=num_lstm_dense, num_lstm_hidden=num_lstm_hidden, num_lstm_base=num_lstm_base, dropout=dropout, num_conv=num_conv, num_conv_dense=num_conv_dense, num_conv_base=num_conv_base, num_conv_dense_base=num_conv_dense_base, time_step=time_step, num_features=num_features, patience=patience, mape_patience=mape_patience, plot_epoch_interval=plot_epoch_interval, generator=generator, critic=critic, gan_model=gan_model)
+        models, losses, bests, breaks = train_gan(epochs=num_epoch, batch_size=batch_size, X=X, y=y, num_samples=num_samples, n_critic=n_critic, clip_value=clip_value, gan_lr=gan_lr, critic_lr=critic_lr, num_lstm=num_lstm, num_lstm_dense=num_lstm_dense, num_lstm_hidden=num_lstm_hidden, num_lstm_base=num_lstm_base, dropout=dropout, num_conv=num_conv, num_conv_dense=num_conv_dense, num_conv_base=num_conv_base, num_conv_dense_base=num_conv_dense_base, time_step=time_step, num_features=num_features, patience=patience, mape_patience=mape_patience, mape_epoch_interval=mape_epoch_interval, mape_patience_threshold=mape_patience_threshold, mape_plot_threshold=mape_plot_threshold, low_mape_epoch_interval=low_mape_epoch_interval, generator=generator, critic=critic, gan_model=gan_model)
         (early_stop_triggered, mape_patience_hitted) = breaks
         if early_stop_triggered:
             print('💥💣🧨🔥 early_stop_triggered 🔥🧨💣💥')
         if mape_patience_hitted:
             print('💥💣🧨🔥 mape_patience_hitted 🔥🧨💣💥')
-        if early_stop_triggered or mape_patience_hitted:
-            automate_train()
+        # if early_stop_triggered or mape_patience_hitted:
+        #     automate_train()
         return models, losses, bests, breaks
     
     # Train the GAN
