@@ -88,8 +88,29 @@ def build_gan(generator, critic, time_step, num_features):
     model = Model(gan_input, gan_output)
     return model
 
+# Gradient Penalty calculation
+def compute_gradient_penalty(real_sequences, fake_sequences, critic):
+    # Random weight interpolation between real and fake
+    alpha = tf.random.uniform(shape=[real_sequences.shape[0], 1, 1], minval=0., maxval=1.)
+    interpolated_sequences = alpha * real_sequences + (1 - alpha) * fake_sequences
+    
+    with tf.GradientTape() as tape:
+        tape.watch(interpolated_sequences)
+        interpolated_logits = critic(interpolated_sequences)
+    
+    # Compute gradients w.r.t. the interpolated data
+    gradients = tape.gradient(interpolated_logits, interpolated_sequences)
+    
+    # Compute the norm of the gradients
+    gradients_norm = tf.sqrt(tf.reduce_sum(tf.square(gradients), axis=[1, 2]))
+    
+    # Gradient penalty: ( ||gradients||_2 - 1 )^2
+    gradient_penalty = tf.reduce_mean(tf.square(gradients_norm - 1.0))
+    
+    return gradient_penalty
+
 # Train the GAN
-def train_gan(epochs, batch_size, X, y, num_samples, n_critic, clip_value, gan_lr, critic_lr, num_lstm, num_lstm_dense, num_lstm_hidden, num_lstm_base, dropout, num_conv, num_conv_dense, num_conv_base, num_conv_dense_base, time_step, num_features, patience=5, mape_patience=5, mape_epoch_interval=50, mape_patience_threshold=30, mape_plot_threshold=20, low_mape_epoch_interval=50, generator=None, critic=None, gan_model=None):
+def train_gan(epochs, batch_size, X, y, num_samples, n_critic, clip_value, gan_lr, critic_lr, num_lstm, num_lstm_dense, num_lstm_hidden, num_lstm_base, dropout, num_conv, num_conv_dense, num_conv_base, num_conv_dense_base, time_step, num_features, patience=5, mape_patience=5, mape_epoch_interval=50, mape_patience_threshold=30, mape_plot_threshold=20, low_mape_epoch_interval=50, lambda_gp=10, generator=None, critic=None, gan_model=None):
     if generator is None:
         generator = build_generator(num_lstm=num_lstm, num_dense=num_lstm_dense, time_step=time_step, num_features=num_features, num_hidden=num_lstm_hidden, num_base=num_lstm_base, dropout=dropout)
     
@@ -132,13 +153,19 @@ def train_gan(epochs, batch_size, X, y, num_samples, n_critic, clip_value, gan_l
                 real_loss = tf.reduce_mean(critic(real_data))
                 fake_loss = tf.reduce_mean(critic(fake_data))
                 c_loss = fake_loss - real_loss
+
+                # Compute the gradient penalty
+                if lambda_gp:
+                    gradient_penalty = compute_gradient_penalty(real_data, fake_data, critic)
+                    c_loss = c_loss + lambda_gp * gradient_penalty
             
             grads = tape.gradient(c_loss, critic.trainable_variables)
             critic_optimizer.apply_gradients(zip(grads, critic.trainable_variables))
 
-            # Clip weights
-            for weight in critic.trainable_variables:
-                weight.assign(tf.clip_by_value(weight, -clip_value, clip_value))
+            # Clip weights if no gradient penalty
+            if not lambda_gp:
+                for weight in critic.trainable_variables:
+                    weight.assign(tf.clip_by_value(weight, -clip_value, clip_value))
 
         # Train Generator
         with tf.GradientTape() as tape:
@@ -331,23 +358,24 @@ if __name__ == "__main__":
     num_epoch = 500
 
     # Learning rates
-    gan_lr = 1e-3
+    gan_lr = 1e-5
     critic_lr = 1e-4
 
-    n_critic = 3 # Number of training steps for the critic per generator step
+    n_critic = 4 # Number of training steps for the critic per generator step
     clip_value = 0.01
+    lambda_gp = 5 # Gradient penalty weight (hyperparameter)
     
     # LSTM
     num_lstm = 0
     num_lstm_hidden = 16
 
     num_lstm_dense = 2
-    num_lstm_base = 64
+    num_lstm_base = 16
     dropout = 0.2
 
     # Critic
-    num_conv = 2
-    num_conv_base = 64
+    num_conv = 4
+    num_conv_base = 16
 
     num_conv_dense = 0
     num_conv_dense_base = 64
@@ -360,7 +388,7 @@ if __name__ == "__main__":
     # plot_train(features_train, target_train)
 
     def automate_train():
-        models, losses, bests, breaks = train_gan(epochs=num_epoch, batch_size=batch_size, X=X, y=y, num_samples=num_samples, n_critic=n_critic, clip_value=clip_value, gan_lr=gan_lr, critic_lr=critic_lr, num_lstm=num_lstm, num_lstm_dense=num_lstm_dense, num_lstm_hidden=num_lstm_hidden, num_lstm_base=num_lstm_base, dropout=dropout, num_conv=num_conv, num_conv_dense=num_conv_dense, num_conv_base=num_conv_base, num_conv_dense_base=num_conv_dense_base, time_step=time_step, num_features=num_features, patience=patience, mape_patience=mape_patience, mape_epoch_interval=mape_epoch_interval, mape_patience_threshold=mape_patience_threshold, mape_plot_threshold=mape_plot_threshold, low_mape_epoch_interval=low_mape_epoch_interval, generator=generator, critic=critic, gan_model=gan_model)
+        models, losses, bests, breaks = train_gan(epochs=num_epoch, batch_size=batch_size, X=X, y=y, num_samples=num_samples, n_critic=n_critic, clip_value=clip_value, gan_lr=gan_lr, critic_lr=critic_lr, num_lstm=num_lstm, num_lstm_dense=num_lstm_dense, num_lstm_hidden=num_lstm_hidden, num_lstm_base=num_lstm_base, dropout=dropout, num_conv=num_conv, num_conv_dense=num_conv_dense, num_conv_base=num_conv_base, num_conv_dense_base=num_conv_dense_base, time_step=time_step, num_features=num_features, patience=patience, mape_patience=mape_patience, mape_epoch_interval=mape_epoch_interval, mape_patience_threshold=mape_patience_threshold, mape_plot_threshold=mape_plot_threshold, low_mape_epoch_interval=low_mape_epoch_interval, lambda_gp=lambda_gp, generator=generator, critic=critic, gan_model=gan_model)
         (early_stop_triggered, mape_patience_hitted) = breaks
         if early_stop_triggered:
             print('💥💣🧨🔥 early_stop_triggered 🔥🧨💣💥')
