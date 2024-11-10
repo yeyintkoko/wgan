@@ -190,7 +190,7 @@ def train_gan(epochs, batch_size, X, y, num_samples, n_critic, clip_value, gen_l
                 plot_result(new_data, target_test, epoch)
 
             if mape < best_mape:
-                print(f"MAPE% improved: {best_mape - mape}")
+                print(f"MAPE% improved: {best_mape - mape} and saved")
                 generator.save(checkpoint_path)  # Save the model
                 best_mape = mape
                 best_epoch = epoch
@@ -213,8 +213,7 @@ def train_gan(epochs, batch_size, X, y, num_samples, n_critic, clip_value, gen_l
             if g_loss < best_g_loss:
                 best_g_loss = g_loss
                 patience_counter = 0
-                generator.save(checkpoint_path)  # Save the model
-                print("Model improved and saved.")
+                print("Model improved.")
             else:
                 patience_counter += 1
             
@@ -351,26 +350,26 @@ if __name__ == "__main__":
     mape_epoch_interval = 10 # MAPE will be check on this inverval of epoch
     mape_patience_threshold = 30 # While mape get lower than this value, mape break will be disabled
     mape_plot_threshold = 0 # A flag to show preview plot will be set when mape passed down this value, then the preview will be shown on every next mape_epoch_interval. Setting this value to 0 will show preview on every mape_epoch_interval regardless of mape value.
-    low_mape_epoch_interval = 10 #50 # Reduce mape_epoch_interval to this value to check MAPE more often when the result get closer to actual
+    low_mape_epoch_interval = 10 # Reduce mape_epoch_interval to this value to check MAPE more often when the result get closer to actual
     num_epoch = 1500
 
     # Learning rates
-    gen_lr = 1e-3
-    critic_lr = 1e-4
+    gen_lr = 1e-5
+    critic_lr = 1e-6
 
     n_critic = 3 # Number of training steps for the critic per generator step
     clip_value = 0.01
-    lambda_gp = 0 # Gradient penalty weight
+    lambda_gp = 10 # Gradient penalty weight
     
     # Generator
     num_conv_gen = 0
-    conv_base_gen = 64
+    conv_base_gen = 16
 
     num_dense_gen = 2
     dense_base_gen = 64
 
     # Critic
-    num_conv_critic = 2
+    num_conv_critic = 4
     conv_base_critic = 64
 
     num_dense_critic = 0
