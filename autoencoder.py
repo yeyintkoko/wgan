@@ -55,7 +55,7 @@ def build_stacked_autoencoder(input_shape):
     encoded = layers.Dense(input_shape[0], activation='linear')(encoded)
     
     decoded = layers.Dense(64, activation='relu')(encoded)
-    decoded = layers.Dense(input_shape[0], activation='linear')(decoded)
+    decoded = layers.Dense(1, activation='linear')(decoded)
     
     autoencoder = models.Model(input_layer, decoded)
     encoder = models.Model(input_layer, encoded)
@@ -71,7 +71,7 @@ num_features = X_train.shape[1]
 autoencoder, encoder = build_stacked_autoencoder((num_features,))
 
 # Train the autoencoder
-autoencoder.fit(X_train, X_train, epochs=400, batch_size=8, verbose=0, shuffle=True, validation_data=(X_test, X_test))
+autoencoder.fit(X_train, y_train, epochs=400, batch_size=8, verbose=0, shuffle=True, validation_data=(X_test, y_test))
 
 # Use encoder part of the autoencoder for feature selection
 encoded_features_train = encoder.predict(X_train)
@@ -95,8 +95,8 @@ def perform_regression_test():
     y_pred = regressor.predict(encoded_features_test)
 
     # Inverse transform the predicted values and actual values
-    y_pred_original = scaler_y.inverse_transform(y_pred)
-    y_test_original = scaler_y.inverse_transform(y_test)
+    y_pred_original = scaler_y.inverse_transform(y_pred.reshape(-1, 1)).flatten()
+    y_test_original = scaler_y.inverse_transform(y_test.reshape(-1, 1)).flatten()
 
     # Calculate Mean Squared Error (MSE) on the original scale
     mse_original = mean_squared_error(y_test_original, y_pred_original)
