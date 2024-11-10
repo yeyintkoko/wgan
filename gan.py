@@ -346,7 +346,7 @@ y = train_target
 if __name__ == "__main__":
 
     patience = 30
-    mape_patience = 3
+    mape_patience = 10
     mape_epoch_interval = 10 # MAPE will be check on this inverval of epoch
     mape_patience_threshold = 30 # While mape get lower than this value, mape break will be disabled
     mape_plot_threshold = 0 # A flag to show preview plot will be set when mape passed down this value, then the preview will be shown on every next mape_epoch_interval. Setting this value to 0 will show preview on every mape_epoch_interval regardless of mape value.
@@ -354,12 +354,12 @@ if __name__ == "__main__":
     num_epoch = 1500
 
     # Learning rates
-    gen_lr = 1e-5
-    critic_lr = 1e-6
+    gen_lr = 2e-5
+    critic_lr = 1e-5
 
-    n_critic = 3 # Number of training steps for the critic per generator step
+    n_critic = 4 # Number of training steps for the critic per generator step
     clip_value = 0.01
-    lambda_gp = 10 # Gradient penalty weight
+    lambda_gp = 9 # Gradient penalty weight
     
     # Generator
     num_conv_gen = 0
@@ -369,11 +369,11 @@ if __name__ == "__main__":
     dense_base_gen = 64
 
     # Critic
-    num_conv_critic = 4
+    num_conv_critic = 2
     conv_base_critic = 64
 
-    num_dense_critic = 0
-    dense_base_critic = 16
+    num_dense_critic = 2
+    dense_base_critic = 64
 
     # Load trained models
     gan_model = None #load_model('best_gan_model.keras')
