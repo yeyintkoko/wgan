@@ -359,13 +359,13 @@ if __name__ == "__main__":
 
     n_critic = 4 # Number of training steps for the critic per generator step
     clip_value = 0.01
-    lambda_gp = 9 # Gradient penalty weight
+    lambda_gp = 4 # Gradient penalty weight
     
     # Generator
-    num_conv_gen = 0
+    num_conv_gen = 1
     conv_base_gen = 16
 
-    num_dense_gen = 2
+    num_dense_gen = 1
     dense_base_gen = 64
 
     # Critic
