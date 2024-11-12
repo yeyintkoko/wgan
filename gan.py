@@ -54,7 +54,8 @@ def build_generator(num_conv, conv_base, num_dense, dense_base, time_step, num_f
         # not_last_layer = i < num_conv - 1
         # layer = LSTM(conv_base * (2 ** i), return_sequences=not_last_layer, dropout=0.2)(layer)
         layer = Conv1D(conv_base * (2 ** i), kernel_size=3, padding='same', activation='gelu')(layer)
-        layer = BatchNormalization()(layer)
+        if i > 0:
+            layer = BatchNormalization()(layer)
     layer = Flatten()(layer)
     for i in range(num_dense):
         layer = Dense(dense_base * (2 ** i), activation='gelu')(layer)
@@ -69,7 +70,8 @@ def build_critic(num_conv, conv_base, num_dense, dense_base, time_step, num_feat
     layer = input
     for i in range(num_conv - 1, -1, -1):
         layer = Conv1D(conv_base * (2 ** i), kernel_size=3, padding='same', activation='leaky_relu')(layer)
-        layer = BatchNormalization()(layer)
+        if i > 0:
+            layer = BatchNormalization()(layer)
     layer = Flatten()(layer)
     for i in range(num_dense - 1, -1, -1):
         layer = Dense(dense_base * (2 ** i), activation='relu')(layer)
@@ -346,7 +348,7 @@ y = train_target
 if __name__ == "__main__":
 
     patience = 30
-    mape_patience = 10
+    mape_patience = 30
     mape_epoch_interval = 10 # MAPE will be check on this inverval of epoch
     mape_patience_threshold = 30 # While mape get lower than this value, mape break will be disabled
     mape_plot_threshold = 0 # A flag to show preview plot will be set when mape passed down this value, then the preview will be shown on every next mape_epoch_interval. Setting this value to 0 will show preview on every mape_epoch_interval regardless of mape value.
