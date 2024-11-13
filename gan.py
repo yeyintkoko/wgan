@@ -53,12 +53,12 @@ def build_generator(num_conv, conv_base, num_dense, dense_base, time_step, num_f
     for i in range(num_conv):
         # not_last_layer = i < num_conv - 1
         # layer = LSTM(conv_base * (2 ** i), return_sequences=not_last_layer, dropout=0.2)(layer)
-        layer = Conv1D(conv_base * (2 ** i), kernel_size=3, padding='same', activation='gelu')(layer)
+        layer = Conv1D(conv_base * (2 ** i), kernel_size=3, padding='same', activation='relu')(layer)
         if i > 0:
             layer = BatchNormalization()(layer)
     layer = Flatten()(layer)
     for i in range(num_dense):
-        layer = Dense(dense_base * (2 ** i), activation='gelu')(layer)
+        layer = Dense(dense_base * (2 ** i), activation='relu')(layer)
         layer = BatchNormalization()(layer)
     output = Dense(1, activation='linear')(layer)  # Output layer
     output = Reshape((1, 1))(output)
@@ -74,7 +74,7 @@ def build_critic(num_conv, conv_base, num_dense, dense_base, time_step, num_feat
             layer = BatchNormalization()(layer)
     layer = Flatten()(layer)
     for i in range(num_dense - 1, -1, -1):
-        layer = Dense(dense_base * (2 ** i), activation='relu')(layer)
+        layer = Dense(dense_base * (2 ** i), activation='leaky_relu')(layer)
         layer = BatchNormalization()(layer)
     output = Dense(1)(layer) # No activation for critic
     return Model(input, output)
@@ -337,7 +337,7 @@ num_features = features_train.shape[1]
 
 time_step = 150
 
-reduce_index = 0
+reduce_index = 2
 num_samples, time_step, batch_size, batch_sizes = get_hyperparams(time_step=time_step, features_train=features_train, reduce_index=reduce_index)
 
 train_data, train_target = prepare_data(num_samples=num_samples, time_step=time_step, features_train=features_train, target_train=target_train)
@@ -347,11 +347,11 @@ y = train_target
 # This block will only execute when this file is run directly
 if __name__ == "__main__":
 
-    patience = 30
-    mape_patience = 30
+    patience = 100
+    mape_patience = 100
     mape_epoch_interval = 10 # MAPE will be check on this inverval of epoch
     mape_patience_threshold = 30 # While mape get lower than this value, mape break will be disabled
-    mape_plot_threshold = 0 # A flag to show preview plot will be set when mape passed down this value, then the preview will be shown on every next mape_epoch_interval. Setting this value to 0 will show preview on every mape_epoch_interval regardless of mape value.
+    mape_plot_threshold = 20 # A flag to show preview plot will be set when mape passed down this value, then the preview will be shown on every next mape_epoch_interval. Setting this value to 0 will show preview on every mape_epoch_interval regardless of mape value.
     low_mape_epoch_interval = 10 # Reduce mape_epoch_interval to this value to check MAPE more often when the result get closer to actual
     num_epoch = 1500
 
@@ -374,7 +374,7 @@ if __name__ == "__main__":
     num_conv_critic = 2
     conv_base_critic = 64
 
-    num_dense_critic = 2
+    num_dense_critic = 1
     dense_base_critic = 64
 
     # Load trained models
