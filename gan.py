@@ -349,29 +349,29 @@ if __name__ == "__main__":
 
     patience = 100
     mape_patience = 100
-    mape_epoch_interval = 10 # MAPE will be check on this inverval of epoch
+    mape_epoch_interval = 20 # MAPE will be check on this inverval of epoch
     mape_patience_threshold = 30 # While mape get lower than this value, mape break will be disabled
-    mape_plot_threshold = 20 # A flag to show preview plot will be set when mape passed down this value, then the preview will be shown on every next mape_epoch_interval. Setting this value to 0 will show preview on every mape_epoch_interval regardless of mape value.
+    mape_plot_threshold = 0 # A flag to show preview plot will be set when mape passed down this value, then the preview will be shown on every next mape_epoch_interval. Setting this value to 0 will show preview on every mape_epoch_interval regardless of mape value.
     low_mape_epoch_interval = 10 # Reduce mape_epoch_interval to this value to check MAPE more often when the result get closer to actual
     num_epoch = 1500
 
     # Learning rates
-    gen_lr = 2e-5
-    critic_lr = 1e-5
+    gen_lr = 1e-5
+    critic_lr = 2e-5
 
-    n_critic = 4 # Number of training steps for the critic per generator step
+    n_critic = 5 # Number of training steps for the critic per generator step
     clip_value = 0.01
-    lambda_gp = 4 # Gradient penalty weight
+    lambda_gp = 9 # Gradient penalty weight
     
     # Generator
     num_conv_gen = 1
-    conv_base_gen = 16
+    conv_base_gen = 32
 
     num_dense_gen = 1
     dense_base_gen = 64
 
     # Critic
-    num_conv_critic = 2
+    num_conv_critic = 3
     conv_base_critic = 64
 
     num_dense_critic = 1
