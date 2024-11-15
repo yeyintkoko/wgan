@@ -47,34 +47,32 @@ def prepare_data(num_samples, time_step, features_train, target_train):
     return train_data, train_target
 
 # Define the CNN Generator
-def build_generator(num_conv, conv_base, num_dense, dense_base, time_step, num_features):
+def build_generator(num_lstm, base_lstm, num_dense, base_dense, time_step, num_features):
     input = Input(shape=(time_step, num_features))
     layer = input
-    for i in range(num_conv):
-        # not_last_layer = i < num_conv - 1
-        # layer = LSTM(conv_base * (2 ** i), return_sequences=not_last_layer, dropout=0.2)(layer)
-        layer = Conv1D(conv_base * (2 ** i), kernel_size=3, padding='same', activation='relu')(layer)
-        if i > 0:
-            layer = BatchNormalization()(layer)
-    layer = Flatten()(layer)
+    for i in range(num_lstm):
+        not_last_layer = i < num_lstm - 1
+        layer = LSTM(base_lstm * (2 ** i), return_sequences=not_last_layer, dropout=0.2)(layer)
+    if not num_lstm:
+        layer = Flatten()(layer)
     for i in range(num_dense):
-        layer = Dense(dense_base * (2 ** i), activation='relu')(layer)
+        layer = Dense(base_dense * (2 ** i), activation='relu')(layer)
         layer = BatchNormalization()(layer)
     output = Dense(1, activation='linear')(layer)  # Output layer
     output = Reshape((1, 1))(output)
     return Model(input, output)
 
 # Define the CNN Discriminator
-def build_critic(num_conv, conv_base, num_dense, dense_base, time_step, num_features):
+def build_critic(num_conv, base_conv, num_dense, base_dense, time_step, num_features):
     input = Input(shape=(1, 1))
     layer = input
     for i in range(num_conv - 1, -1, -1):
-        layer = Conv1D(conv_base * (2 ** i), kernel_size=3, padding='same', activation='leaky_relu')(layer)
+        layer = Conv1D(base_conv * (2 ** i), kernel_size=3, padding='same', activation='leaky_relu')(layer)
         if i > 0:
             layer = BatchNormalization()(layer)
     layer = Flatten()(layer)
     for i in range(num_dense - 1, -1, -1):
-        layer = Dense(dense_base * (2 ** i), activation='leaky_relu')(layer)
+        layer = Dense(base_dense * (2 ** i), activation='leaky_relu')(layer)
         layer = BatchNormalization()(layer)
     output = Dense(1)(layer) # No activation for critic
     return Model(input, output)
@@ -109,13 +107,13 @@ def compute_gradient_penalty(real_sequences, fake_sequences, critic):
     return gradient_penalty
 
 # Train the GAN
-def train_gan(epochs, batch_size, X, y, num_samples, n_critic, clip_value, gen_lr, critic_lr, num_conv_gen, num_dense_gen, conv_base_gen, dense_base_gen, num_conv_critic, num_dense_critic, conv_base_critic, dense_base_critic, time_step, num_features, patience=5, mape_patience=5, mape_epoch_interval=50, mape_patience_threshold=30, mape_plot_threshold=20, low_mape_epoch_interval=50, lambda_gp=10, generator=None, critic=None, gan_model=None):
+def train_gan(epochs, batch_size, X, y, num_samples, n_critic, clip_value, gen_lr, critic_lr, num_lstm, gen_dense, base_lstm, gen_base, num_conv, critic_dense, base_conv, critic_base, time_step, num_features, patience=5, mape_patience=5, mape_epoch_interval=50, mape_patience_threshold=30, mape_plot_threshold=20, low_mape_epoch_interval=50, lambda_gp=10, generator=None, critic=None, gan_model=None):
     if generator is None:
-        generator = build_generator(num_conv_gen, conv_base_gen, num_dense_gen, dense_base_gen, time_step, num_features)
+        generator = build_generator(num_lstm, base_lstm, gen_dense, gen_base, time_step, num_features)
     gen_optimizer = Adam(gen_lr)
 
     if critic is None:
-        critic = build_critic(num_conv_critic, conv_base_critic, num_dense_critic, dense_base_critic, time_step, num_features)
+        critic = build_critic(num_conv, base_conv, critic_dense, critic_base, time_step, num_features)
     critic_optimizer = Adam(critic_lr)
 
     if gan_model is None:
@@ -337,7 +335,7 @@ num_features = features_train.shape[1]
 
 time_step = 150
 
-reduce_index = 2
+reduce_index = 0
 num_samples, time_step, batch_size, batch_sizes = get_hyperparams(time_step=time_step, features_train=features_train, reduce_index=reduce_index)
 
 train_data, train_target = prepare_data(num_samples=num_samples, time_step=time_step, features_train=features_train, target_train=target_train)
@@ -347,35 +345,35 @@ y = train_target
 # This block will only execute when this file is run directly
 if __name__ == "__main__":
 
-    patience = 100
-    mape_patience = 100
+    patience = 30
+    mape_patience = 3
     mape_epoch_interval = 20 # MAPE will be check on this inverval of epoch
     mape_patience_threshold = 30 # While mape get lower than this value, mape break will be disabled
     mape_plot_threshold = 0 # A flag to show preview plot will be set when mape passed down this value, then the preview will be shown on every next mape_epoch_interval. Setting this value to 0 will show preview on every mape_epoch_interval regardless of mape value.
     low_mape_epoch_interval = 10 # Reduce mape_epoch_interval to this value to check MAPE more often when the result get closer to actual
-    num_epoch = 1500
+    num_epoch = 500
 
     # Learning rates
-    gen_lr = 1e-5
-    critic_lr = 2e-5
+    gen_lr = 2e-5
+    critic_lr = 1e-5
 
-    n_critic = 5 # Number of training steps for the critic per generator step
+    n_critic = 3 # Number of training steps for the critic per generator step
     clip_value = 0.01
     lambda_gp = 9 # Gradient penalty weight
     
     # Generator
-    num_conv_gen = 1
-    conv_base_gen = 32
+    num_lstm = 0
+    base_lstm = 32
 
-    num_dense_gen = 1
-    dense_base_gen = 64
+    gen_dense = 2
+    gen_base = 64
 
     # Critic
-    num_conv_critic = 3
-    conv_base_critic = 64
+    num_conv = 3
+    base_conv = 64
 
-    num_dense_critic = 1
-    dense_base_critic = 64
+    critic_dense = 2
+    critic_base = 64
 
     # Load trained models
     gan_model = None #load_model('best_gan_model.keras')
@@ -385,7 +383,7 @@ if __name__ == "__main__":
     # plot_train(features_train, target_train)
 
     def automate_train():
-        models, losses, bests, breaks = train_gan(epochs=num_epoch, batch_size=batch_size, X=X, y=y, num_samples=num_samples, n_critic=n_critic, clip_value=clip_value, gen_lr=gen_lr, critic_lr=critic_lr, num_conv_gen=num_conv_gen, num_dense_gen=num_dense_gen, conv_base_gen=conv_base_gen, dense_base_gen=dense_base_gen, num_conv_critic=num_conv_critic, num_dense_critic=num_dense_critic, conv_base_critic=conv_base_critic, dense_base_critic=dense_base_critic, time_step=time_step, num_features=num_features, patience=patience, mape_patience=mape_patience, mape_epoch_interval=mape_epoch_interval, mape_patience_threshold=mape_patience_threshold, mape_plot_threshold=mape_plot_threshold, low_mape_epoch_interval=low_mape_epoch_interval, lambda_gp=lambda_gp, generator=generator, critic=critic, gan_model=gan_model)
+        models, losses, bests, breaks = train_gan(num_epoch, batch_size, X, y, num_samples, n_critic, clip_value, gen_lr, critic_lr, num_lstm, gen_dense, base_lstm, gen_base, num_conv, critic_dense, base_conv, critic_base, time_step, num_features, patience, mape_patience, mape_epoch_interval, mape_patience_threshold, mape_plot_threshold, low_mape_epoch_interval, lambda_gp, generator, critic, gan_model)
         (early_stop_triggered, mape_patience_hitted) = breaks
         if early_stop_triggered:
             print('💥💣🧨🔥 early_stop_triggered 🔥🧨💣💥')
