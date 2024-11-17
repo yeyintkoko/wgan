@@ -133,6 +133,8 @@ def train_gan(epochs, batch_size, X, y, num_samples, n_critic, clip_value, gen_l
     best_epoch = 0
     early_stop_triggered = False
     mape_patience_hitted = False
+    generator_weight = 1
+    critic_weight = 1
 
     for epoch in range(epochs):
         for _ in range(n_critic):
@@ -155,8 +157,10 @@ def train_gan(epochs, batch_size, X, y, num_samples, n_critic, clip_value, gen_l
                 if lambda_gp:
                     gradient_penalty = compute_gradient_penalty(real_data, fake_data, critic)
                     c_loss = c_loss + lambda_gp * gradient_penalty
-            
-            grads = tape.gradient(c_loss, critic.trainable_variables)
+                
+                weighted_c_loss = c_loss * critic_weight
+
+            grads = tape.gradient(weighted_c_loss, critic.trainable_variables)
             critic_optimizer.apply_gradients(zip(grads, critic.trainable_variables))
 
             # Clip weights if no gradient penalty
@@ -167,17 +171,19 @@ def train_gan(epochs, batch_size, X, y, num_samples, n_critic, clip_value, gen_l
         # Train Generator
         with tf.GradientTape() as tape:
             g_loss = -tf.reduce_mean(gan_model(train_data))
+            weighted_g_loss = g_loss * generator_weight
             
-        grads = tape.gradient(g_loss, generator.trainable_variables)
+        grads = tape.gradient(weighted_g_loss, generator.trainable_variables)
         gen_optimizer.apply_gradients(zip(grads, generator.trainable_variables))
 
-        critic_losses.append(c_loss.numpy())
-        generator_losses.append(g_loss.numpy())
+        critic_losses.append(weighted_c_loss.numpy())
+        generator_losses.append(weighted_g_loss.numpy())
 
         if epoch % mape_epoch_interval == 0:
             features_test_data = get_features_test_data(encoded_features_test, X[-1])
             new_data = generator.predict(features_test_data).flatten()
             mape = evaluate_model(target_test, new_data)
+
             if mape < mape_patience_threshold:
                 mape_patience_counter = 0
             else:
@@ -195,8 +201,12 @@ def train_gan(epochs, batch_size, X, y, num_samples, n_critic, clip_value, gen_l
                 best_mape = mape
                 best_epoch = epoch
                 mape_patience_counter = 0
+                generator_weight = 1 + (mape / 100)  # The generator gets stronger with lower MAPE
+                critic_weight = 1 / (1 + (mape / 100))  # The critic gets weaker with lower MAPE
             else:
                 mape_patience_counter += 1
+                critic_weight = 1 + (mape / 100)  # The critic gets stronger with higher MAPE
+                generator_weight = 1 / (1 + (mape / 100))  # The generator gets weaker with higher MAPE
                 
             # Early stopping logic: MAPE patience counter
             if mape_patience_counter >= mape_patience:
