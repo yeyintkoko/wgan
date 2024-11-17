@@ -335,8 +335,9 @@ num_features = features_train.shape[1]
 
 time_step = 150
 
-reduce_index = 0
+reduce_index = 1
 num_samples, time_step, batch_size, batch_sizes = get_hyperparams(time_step=time_step, features_train=features_train, reduce_index=reduce_index)
+# batch_size = 8
 
 train_data, train_target = prepare_data(num_samples=num_samples, time_step=time_step, features_train=features_train, target_train=target_train)
 X = train_data
@@ -347,17 +348,17 @@ if __name__ == "__main__":
 
     patience = 30
     mape_patience = 3
-    mape_epoch_interval = 20 # MAPE will be check on this inverval of epoch
+    mape_epoch_interval = 10 # MAPE will be check on this inverval of epoch
     mape_patience_threshold = 30 # While mape get lower than this value, mape break will be disabled
     mape_plot_threshold = 0 # A flag to show preview plot will be set when mape passed down this value, then the preview will be shown on every next mape_epoch_interval. Setting this value to 0 will show preview on every mape_epoch_interval regardless of mape value.
     low_mape_epoch_interval = 10 # Reduce mape_epoch_interval to this value to check MAPE more often when the result get closer to actual
-    num_epoch = 500
+    num_epoch = 600
 
     # Learning rates
-    gen_lr = 2e-5
+    gen_lr = 1e-6
     critic_lr = 1e-5
 
-    n_critic = 3 # Number of training steps for the critic per generator step
+    n_critic = 4 # Number of training steps for the critic per generator step
     clip_value = 0.01
     lambda_gp = 9 # Gradient penalty weight
     
@@ -369,10 +370,10 @@ if __name__ == "__main__":
     gen_base = 64
 
     # Critic
-    num_conv = 3
+    num_conv = 5
     base_conv = 64
 
-    critic_dense = 2
+    critic_dense = 4
     critic_base = 64
 
     # Load trained models
