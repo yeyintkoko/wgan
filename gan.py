@@ -388,7 +388,7 @@ if __name__ == "__main__":
     num_lstm = 0
     base_lstm = 32
 
-    gen_dense = 2
+    gen_dense = 1
     gen_base = 64
 
     # Critic
@@ -410,8 +410,8 @@ if __name__ == "__main__":
             print('💥💣🧨🔥 early_stop_triggered 🔥🧨💣💥')
         if mape_patience_hitted:
             print('💥💣🧨🔥 mape_patience_hitted 🔥🧨💣💥')
-        if early_stop_triggered or mape_patience_hitted:
-            automate_train()
+        # if early_stop_triggered or mape_patience_hitted:
+        #     automate_train()
         return models, losses, bests, breaks
     
     # Train the GAN
