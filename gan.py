@@ -85,6 +85,9 @@ def build_gan(generator, critic, time_step, num_features):
     model = Model(gan_input, gan_output)
     return model
 
+def get_model_paths():
+    return 'checkpoints/generator', 'checkpoints/critic'
+
 # Gradient Penalty calculation
 def compute_gradient_penalty(real_sequences, fake_sequences, critic):
     # Random weight interpolation between real and fake
@@ -107,17 +110,26 @@ def compute_gradient_penalty(real_sequences, fake_sequences, critic):
     return gradient_penalty
 
 # Train the GAN
-def train_gan(epochs, batch_size, X, y, num_samples, n_critic, clip_value, gen_lr, critic_lr, num_lstm, gen_dense, base_lstm, gen_base, num_conv, critic_dense, base_conv, critic_base, time_step, num_features, patience=5, mape_patience=5, mape_epoch_interval=50, mape_patience_threshold=30, mape_plot_threshold=20, low_mape_epoch_interval=50, lambda_gp=10, generator=None, critic=None, gan_model=None):
-    if generator is None:
-        generator = build_generator(num_lstm, base_lstm, gen_dense, gen_base, time_step, num_features)
+def train_gan(epochs, batch_size, X, y, num_samples, n_critic, clip_value, gen_lr, critic_lr, num_lstm, gen_dense, base_lstm, gen_base, num_conv, critic_dense, base_conv, critic_base, time_step, num_features, patience=5, mape_patience=5, mape_epoch_interval=50, mape_patience_threshold=30, mape_plot_threshold=20, low_mape_epoch_interval=50, lambda_gp=10, restore_checkpoint=False):
+    generator = build_generator(num_lstm, base_lstm, gen_dense, gen_base, time_step, num_features)
     gen_optimizer = Adam(gen_lr)
-
-    if critic is None:
-        critic = build_critic(num_conv, base_conv, critic_dense, critic_base, time_step, num_features)
+    gen_checkpoint = tf.train.Checkpoint(model=generator, optimizer=gen_optimizer)
+    
+    critic = build_critic(num_conv, base_conv, critic_dense, critic_base, time_step, num_features)
     critic_optimizer = Adam(critic_lr)
+    critic_checkpoint = tf.train.Checkpoint(model=critic, optimizer=critic_optimizer)
 
-    if gan_model is None:
-        gan_model = build_gan(generator, critic, time_step, num_features)
+    gen_path, critic_path = get_model_paths()
+    gen_checkpoint_manager = tf.train.CheckpointManager(gen_checkpoint, gen_path, max_to_keep=3)
+    critic_checkpoint_manager = tf.train.CheckpointManager(critic_checkpoint, critic_path, max_to_keep=3)
+
+    if restore_checkpoint:
+        if gen_checkpoint_manager.latest_checkpoint:
+            gen_checkpoint.restore(gen_checkpoint_manager.latest_checkpoint)
+        if critic_checkpoint_manager.latest_checkpoint:
+            critic_checkpoint.restore(critic_checkpoint_manager.latest_checkpoint)
+    
+    gan_model = build_gan(generator, critic, time_step, num_features)
 
     critic_losses = []
     generator_losses = []
@@ -125,7 +137,6 @@ def train_gan(epochs, batch_size, X, y, num_samples, n_critic, clip_value, gen_l
     # Initialize variables for early stopping and model checkpointing
     best_g_loss = float('inf')
     patience_counter = 0
-    checkpoint_path = 'best_gan_model.keras'
 
     best_mape = float('inf')
     mape_patience_counter = 0
@@ -197,7 +208,8 @@ def train_gan(epochs, batch_size, X, y, num_samples, n_critic, clip_value, gen_l
 
             if mape < best_mape:
                 print(f"MAPE% improved: {best_mape - mape} and saved")
-                generator.save(checkpoint_path)  # Save the model
+                gen_checkpoint_manager.save() # Save the model
+                critic_checkpoint_manager.save() # Save the model
                 best_mape = mape
                 best_epoch = epoch
                 mape_patience_counter = 0
@@ -359,8 +371,8 @@ if __name__ == "__main__":
     patience = 10
     mape_patience = 3
     mape_epoch_interval = 10 # MAPE will be check on this inverval of epoch
-    mape_patience_threshold = 30 # While mape get lower than this value, mape break will be disabled
-    mape_plot_threshold = 25 # A flag to show preview plot will be set when mape passed down this value, then the preview will be shown on every next mape_epoch_interval. Setting this value to 0 will show preview on every mape_epoch_interval regardless of mape value.
+    mape_patience_threshold = 20 # While mape get lower than this value, mape break will be disabled
+    mape_plot_threshold = 15 # A flag to show preview plot will be set when mape passed down this value, then the preview will be shown on every next mape_epoch_interval. Setting this value to 0 will show preview on every mape_epoch_interval regardless of mape value.
     low_mape_epoch_interval = 10 # Reduce mape_epoch_interval to this value to check MAPE more often when the result get closer to actual
     num_epoch = 600
 
@@ -386,22 +398,24 @@ if __name__ == "__main__":
     critic_dense = 3
     critic_base = 64
 
-    # Load trained models
-    gan_model = None #load_model('best_gan_model.keras')
-    generator = None #load_model('generator_model.keras')
-    critic = None #load_model('critic_model.keras')
+    restore_checkpoint = True
     
     # plot_train(features_train, target_train)
 
     def automate_train():
-        models, losses, bests, breaks = train_gan(num_epoch, batch_size, X, y, num_samples, n_critic, clip_value, gen_lr, critic_lr, num_lstm, gen_dense, base_lstm, gen_base, num_conv, critic_dense, base_conv, critic_base, time_step, num_features, patience, mape_patience, mape_epoch_interval, mape_patience_threshold, mape_plot_threshold, low_mape_epoch_interval, lambda_gp, generator, critic, gan_model)
+        global lambda_gp
+        models, losses, bests, breaks = train_gan(num_epoch, batch_size, X, y, num_samples, n_critic, clip_value, gen_lr, critic_lr, num_lstm, gen_dense, base_lstm, gen_base, num_conv, critic_dense, base_conv, critic_base, time_step, num_features, patience, mape_patience, mape_epoch_interval, mape_patience_threshold, mape_plot_threshold, low_mape_epoch_interval, lambda_gp, restore_checkpoint)
         (early_stop_triggered, mape_patience_hitted) = breaks
         if early_stop_triggered:
             print('💥💣🧨🔥 early_stop_triggered 🔥🧨💣💥')
         if mape_patience_hitted:
             print('💥💣🧨🔥 mape_patience_hitted 🔥🧨💣💥')
-        # if early_stop_triggered or mape_patience_hitted:
-        #     automate_train()
+        if early_stop_triggered or mape_patience_hitted:
+            if lambda_gp > 4:
+                lambda_gp = 4
+            else:
+                lambda_gp = 9
+            automate_train()
         return models, losses, bests, breaks
     
     # Train the GAN
@@ -421,11 +435,6 @@ if __name__ == "__main__":
     # Inverse transform to get the actual predicted price
     predict_origin = scaler_y.inverse_transform(new_data.reshape(-1, 1)).flatten()
     test_origin = scaler_y.inverse_transform(target_test.reshape(-1, 1)).flatten()
-
-    def save_models():
-        generator.save('generator_model.keras')
-        critic.save('critic_model.keras')
-        gan_model.save('gan_model.keras')
 
     def visualize_result():
         generator.summary()
@@ -461,6 +470,5 @@ if __name__ == "__main__":
         # plot_loss(critic_losses, generator_losses)
         plot_result(new_data, target_test)
 
-    save_models()
     visualize_result()
 
