@@ -192,7 +192,7 @@ def train_gan(epochs, batch_size, X, y, num_samples, n_critic, clip_value, gen_l
 
         if epoch % mape_epoch_interval == 0:
             features_test_data = get_features_test_data(encoded_features_test, X[-1])
-            new_data = generator.predict(features_test_data).flatten()
+            new_data = generator.predict(features_test_data, verbose=0).flatten()
             mape = evaluate_model(target_test, new_data)
 
             if mape < mape_patience_threshold:
@@ -203,11 +203,9 @@ def train_gan(epochs, batch_size, X, y, num_samples, n_critic, clip_value, gen_l
             if not mape_plot_threshold or mape < mape_plot_threshold:
                 plot_epoch = True
                 mape_epoch_interval = low_mape_epoch_interval
-            if plot_epoch:
-                plot_result(new_data, target_test, epoch)
 
             if mape < best_mape:
-                print(f"MAPE% improved: {best_mape - mape} and saved")
+                # print(f"MAPE% improved: {best_mape - mape} and saved")
                 gen_checkpoint_manager.save() # Save the model
                 critic_checkpoint_manager.save() # Save the model
                 best_mape = mape
@@ -219,8 +217,11 @@ def train_gan(epochs, batch_size, X, y, num_samples, n_critic, clip_value, gen_l
                 mape_patience_counter += 1
                 critic_weight = 1 + (mape / 100)  # The critic gets stronger with higher MAPE
                 generator_weight = 1 / (1 + (mape / 100))  # The generator gets weaker with higher MAPE
+            
+            if plot_epoch:
+                plot_result(new_data, target_test, epoch)
                 
-            # Early stopping logic: MAPE patience counter
+            # Early stopping: MAPE
             if mape_patience_counter >= mape_patience:
                 mape_patience_hitted = True
                 print(f'best_mape {best_mape} at epoch {best_epoch}')
@@ -229,7 +230,7 @@ def train_gan(epochs, batch_size, X, y, num_samples, n_critic, clip_value, gen_l
                 return (gan_model, generator, critic), (critic_losses, generator_losses), (best_g_loss, best_mape, best_epoch), (early_stop_triggered, mape_patience_hitted)
 
         if epoch % 10 == 0:
-            print(f'Epoch {epoch}, Discriminator Loss: {c_loss.numpy()}, Generator Loss: {g_loss.numpy()}')
+            # print(f'Epoch {epoch}, Discriminator Loss: {c_loss.numpy()}, Generator Loss: {g_loss.numpy()}')
 
             # Check for improvement
             if g_loss < best_g_loss:
@@ -239,7 +240,7 @@ def train_gan(epochs, batch_size, X, y, num_samples, n_critic, clip_value, gen_l
             else:
                 patience_counter += 1
             
-            # Early stopping logic
+            # Early stopping: Generator loss
             if patience_counter >= patience:
                 early_stop_triggered = True
                 print("Early stopping triggered.")
@@ -292,10 +293,10 @@ def evaluate_model(true_values, predicted_values):
     r2 = r2_score(true_values, predicted_values)
     mape = np.mean(np.abs((true_values - predicted_values) / true_values)) * 100
 
-    print("Evaluation Metrics:")
-    print(f"Mean Squared Error (MSE): {mse}")
-    print(f"Mean Absolute Error (MAE): {mae}")
-    print(f"R-squared (R²): {r2}")
+    # print("Evaluation Metrics:")
+    # print(f"Mean Squared Error (MSE): {mse}")
+    # print(f"Mean Absolute Error (MAE): {mae}")
+    # print(f"R-squared (R²): {r2}")
     print(f"Mean Absolute Percentage Error (MAPE): {mape:.2f}%")
     return mape
 
@@ -371,8 +372,8 @@ if __name__ == "__main__":
     patience = 10
     mape_patience = 3
     mape_epoch_interval = 10 # MAPE will be check on this inverval of epoch
-    mape_patience_threshold = 30 # While mape get lower than this value, mape break will be disabled
-    mape_plot_threshold = 0 # A flag to show preview plot will be set when mape passed down this value, then the preview will be shown on every next mape_epoch_interval. Setting this value to 0 will show preview on every mape_epoch_interval regardless of mape value.
+    mape_patience_threshold = 25 # While mape get lower than this value, mape break will be disabled
+    mape_plot_threshold = 20 # A flag to show preview plot will be set when mape passed down this value, then the preview will be shown on every next mape_epoch_interval. Setting this value to 0 will show preview on every mape_epoch_interval regardless of mape value.
     low_mape_epoch_interval = 10 # Reduce mape_epoch_interval to this value to check MAPE more often when the result get closer to actual
     num_epoch = 600
 
@@ -403,15 +404,15 @@ if __name__ == "__main__":
     # plot_train(features_train, target_train)
 
     def automate_train():
-        global lambda_gp
+        global restore_checkpoint
         models, losses, bests, breaks = train_gan(num_epoch, batch_size, X, y, num_samples, n_critic, clip_value, gen_lr, critic_lr, num_lstm, gen_dense, base_lstm, gen_base, num_conv, critic_dense, base_conv, critic_base, time_step, num_features, patience, mape_patience, mape_epoch_interval, mape_patience_threshold, mape_plot_threshold, low_mape_epoch_interval, lambda_gp, restore_checkpoint)
         (early_stop_triggered, mape_patience_hitted) = breaks
         if early_stop_triggered:
             print('💥💣🧨🔥 early_stop_triggered 🔥🧨💣💥')
         if mape_patience_hitted:
             print('💥💣🧨🔥 mape_patience_hitted 🔥🧨💣💥')
-        # if early_stop_triggered or mape_patience_hitted:
-        #     automate_train()
+        if early_stop_triggered or mape_patience_hitted:
+            automate_train()
         return models, losses, bests, breaks
     
     # Train the GAN
