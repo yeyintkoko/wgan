@@ -109,18 +109,18 @@ def compute_gradient_penalty(real_sequences, fake_sequences, critic):
     
     return gradient_penalty
 
-def adjust_lr(optimizer, epoch, lr_decay_epoch, decay_factor):
-    if epoch % lr_decay_epoch == 0 and epoch != 0:
-        current_lr = optimizer.learning_rate.numpy()
-        new_lr = current_lr * decay_factor
-        optimizer.learning_rate.assign(new_lr)
+def adjust_lr(optimizer, decay_factor):
+    current_lr = optimizer.learning_rate.numpy()
+    new_lr = current_lr * decay_factor
+    optimizer.learning_rate.assign(new_lr)
 
-        formatted_current_lr = "{:.0e}".format(current_lr).replace("-0", "-")
-        formatted_new_lr = "{:.0e}".format(new_lr).replace("-0", "-")
-        print(f"Updated learning rate from {formatted_current_lr} to {formatted_new_lr} at epoch {epoch}")
+    formatted_current_lr = "{:.0e}".format(current_lr).replace("-0", "-")
+    formatted_new_lr = "{:.0e}".format(new_lr).replace("-0", "-")
+    print(f"Updated learning rate from {formatted_current_lr} to {formatted_new_lr}")
+        
 
 # Train the GAN
-def train_gan(epochs, batch_size, X, y, num_samples, n_critic, clip_value, gen_lr, critic_lr, num_lstm, gen_dense, base_lstm, gen_base, num_conv, critic_dense, base_conv, critic_base, time_step, num_features, patience=5, mape_patience=5, mape_epoch_interval=50, mape_patience_threshold=30, mape_plot_threshold=20, low_mape_epoch_interval=50, lambda_gp=10, restore_checkpoint=False, lr_decay_epoch_critic=0, decay_factor_critic=0.5, lr_decay_epoch_gen=0, decay_factor_gen=0.5):
+def train_gan(epochs, batch_size, X, y, num_samples, n_critic, clip_value, gen_lr, critic_lr, num_lstm, gen_dense, base_lstm, gen_base, num_conv, critic_dense, base_conv, critic_base, time_step, num_features, patience, mape_patience, mape_epoch_interval, mape_patience_threshold, mape_plot_threshold, low_mape_epoch_interval, lambda_gp, restore_checkpoint, decay_factor_critic, decay_factor_gen):
     generator = build_generator(num_lstm, base_lstm, gen_dense, gen_base, time_step, num_features)
     gen_optimizer = Adam(learning_rate=gen_lr)
     gen_checkpoint = tf.train.Checkpoint(model=generator, optimizer=gen_optimizer)
@@ -227,12 +227,11 @@ def train_gan(epochs, batch_size, X, y, num_samples, n_critic, clip_value, gen_l
                 mape_patience_counter += 1
                 critic_weight = 1 + (mape / 100)  # The critic gets stronger with higher MAPE
                 generator_weight = 1 / (1 + (mape / 100))  # The generator gets weaker with higher MAPE
+                if decay_factor_critic:
+                    adjust_lr(critic_optimizer, decay_factor_critic)
+                if decay_factor_gen:
+                    adjust_lr(gen_optimizer, decay_factor_gen)
             
-            if lr_decay_epoch_critic:
-                adjust_lr(critic_optimizer, epoch, lr_decay_epoch=lr_decay_epoch_critic, decay_factor=decay_factor_critic)
-
-            if lr_decay_epoch_gen:
-                adjust_lr(gen_optimizer, epoch, lr_decay_epoch=lr_decay_epoch_gen, decay_factor=decay_factor_gen)
             
             if plot_epoch:
                 plot_result(new_data, target_test, epoch)
@@ -385,8 +384,8 @@ y = train_target
 # This block will only execute when this file is run directly
 if __name__ == "__main__":
 
-    patience = 20
-    mape_patience = 3
+    patience = 100
+    mape_patience = 50
     mape_epoch_interval = 10 # MAPE will be check on this inverval of epoch
     mape_patience_threshold = 25 # While mape get lower than this value, mape break will be disabled
     mape_plot_threshold = 20 # A flag to show preview plot will be set when mape passed down this value, then the preview will be shown on every next mape_epoch_interval. Setting this value to 0 will show preview on every mape_epoch_interval regardless of mape value.
@@ -394,7 +393,7 @@ if __name__ == "__main__":
     num_epoch = 1000
 
     # Learning rates
-    gen_lr = 5e-6
+    gen_lr = 1e-5
     critic_lr = 1e-4
 
     n_critic = 5 # Number of training steps for the critic per generator step
@@ -412,20 +411,18 @@ if __name__ == "__main__":
     num_conv = 4
     base_conv = 64
 
-    critic_dense = 3
+    critic_dense = 4
     critic_base = 64
 
     restore_checkpoint = False
-    lr_decay_epoch_gen = 100
-    decay_factor_gen = 0.5
-    lr_decay_epoch_critic = 0
-    decay_factor_critic = 1.15
+    decay_factor_gen = 0.8
+    decay_factor_critic = 0
     
     # plot_train(features_train, target_train)
 
     def automate_train():
         global restore_checkpoint
-        models, losses, bests, breaks = train_gan(num_epoch, batch_size, X, y, num_samples, n_critic, clip_value, gen_lr, critic_lr, num_lstm, gen_dense, base_lstm, gen_base, num_conv, critic_dense, base_conv, critic_base, time_step, num_features, patience, mape_patience, mape_epoch_interval, mape_patience_threshold, mape_plot_threshold, low_mape_epoch_interval, lambda_gp, restore_checkpoint, lr_decay_epoch_critic=lr_decay_epoch_critic, decay_factor_critic=decay_factor_critic, lr_decay_epoch_gen=lr_decay_epoch_gen, decay_factor_gen=decay_factor_gen)
+        models, losses, bests, breaks = train_gan(num_epoch, batch_size, X, y, num_samples, n_critic, clip_value, gen_lr, critic_lr, num_lstm, gen_dense, base_lstm, gen_base, num_conv, critic_dense, base_conv, critic_base, time_step, num_features, patience, mape_patience, mape_epoch_interval, mape_patience_threshold, mape_plot_threshold, low_mape_epoch_interval, lambda_gp, restore_checkpoint, decay_factor_critic=decay_factor_critic, decay_factor_gen=decay_factor_gen)
         (early_stop_triggered, mape_patience_hitted) = breaks
         if early_stop_triggered:
             print('💥💣🧨🔥 early_stop_triggered 🔥🧨💣💥')
