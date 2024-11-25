@@ -221,12 +221,10 @@ def train_gan(epochs, batch_size, X, y, num_samples, n_critic, clip_value, gen_l
                 best_mape = mape
                 best_epoch = epoch
                 mape_patience_counter = 0
-                generator_weight = 1 + (mape / 100)  # The generator gets stronger with lower MAPE
-                critic_weight = 1 / (1 + (mape / 100))  # The critic gets weaker with lower MAPE
             else:
                 mape_patience_counter += 1
-                critic_weight = 1 + (mape / 100)  # The critic gets stronger with higher MAPE
-                generator_weight = 1 / (1 + (mape / 100))  # The generator gets weaker with higher MAPE
+                critic_weight = 1 + (mape / 50)  # The critic gets stronger with higher MAPE
+                generator_weight = 1 / critic_weight  # The generator gets weaker with higher MAPE
                 if decay_factor_critic:
                     adjust_lr(critic_optimizer, decay_factor_critic)
                 if decay_factor_gen:
@@ -384,8 +382,8 @@ y = train_target
 # This block will only execute when this file is run directly
 if __name__ == "__main__":
 
-    patience = 100
-    mape_patience = 50
+    patience = 10
+    mape_patience = 5
     mape_epoch_interval = 10 # MAPE will be check on this inverval of epoch
     mape_patience_threshold = 25 # While mape get lower than this value, mape break will be disabled
     mape_plot_threshold = 20 # A flag to show preview plot will be set when mape passed down this value, then the preview will be shown on every next mape_epoch_interval. Setting this value to 0 will show preview on every mape_epoch_interval regardless of mape value.
@@ -393,12 +391,12 @@ if __name__ == "__main__":
     num_epoch = 1000
 
     # Learning rates
-    gen_lr = 1e-5
+    gen_lr = 1e-6
     critic_lr = 1e-4
 
-    n_critic = 5 # Number of training steps for the critic per generator step
+    n_critic = 4 # Number of training steps for the critic per generator step
     clip_value = 0.01
-    lambda_gp = 9 # Gradient penalty weight
+    lambda_gp = 4 # Gradient penalty weight
     
     # Generator
     num_lstm = 0
@@ -411,12 +409,12 @@ if __name__ == "__main__":
     num_conv = 4
     base_conv = 64
 
-    critic_dense = 4
+    critic_dense = 1
     critic_base = 64
 
     restore_checkpoint = False
-    decay_factor_gen = 0.8
-    decay_factor_critic = 0
+    decay_factor_gen = 0
+    decay_factor_critic = 1.5
     
     # plot_train(features_train, target_train)
 
