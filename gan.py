@@ -226,8 +226,8 @@ def train_gan(epochs, batch_size, X, y, num_samples, n_critic, clip_value, gen_l
                 mape_patience_counter = 0
                 if decay_factor_critic:
                     reset_lr(critic_optimizer, critic_lr)
-                if patience_counter > 0 and decay_factor_gen:
-                    adjust_lr(gen_optimizer, decay_factor_gen)
+                if decay_factor_gen:
+                    reset_lr(gen_optimizer, gen_lr)
             else:
                 last_mape = mape
                 mape_patience_counter += 1
@@ -236,7 +236,7 @@ def train_gan(epochs, batch_size, X, y, num_samples, n_critic, clip_value, gen_l
                 if decay_factor_critic:
                     adjust_lr(critic_optimizer, decay_factor_critic)
                 if decay_factor_gen:
-                    reset_lr(gen_optimizer, gen_lr)
+                    adjust_lr(gen_optimizer, decay_factor_gen)
             
             if plot_epoch:
                 plot_result(new_data, target_test, epoch)
@@ -394,7 +394,7 @@ if __name__ == "__main__":
     mape_patience = 15
     mape_epoch_interval = 10 # MAPE will be check on this inverval of epoch
     mape_patience_threshold = 25 # While mape get lower than this value, mape break will be disabled
-    mape_plot_threshold = 10 # A flag to show preview plot will be set when mape passed down this value, then the preview will be shown on every next mape_epoch_interval. Setting this value to 0 will show preview on every mape_epoch_interval regardless of mape value.
+    mape_plot_threshold = 15 # A flag to show preview plot will be set when mape passed down this value, then the preview will be shown on every next mape_epoch_interval. Setting this value to 0 will show preview on every mape_epoch_interval regardless of mape value.
     low_mape_epoch_interval = 10 # Reduce mape_epoch_interval to this value to check MAPE more often when the result get closer to actual
     num_epoch = 4000
 
