@@ -151,7 +151,7 @@ def train_gan(epochs, batch_size, X, y, num_samples, n_critic, clip_value, gen_l
     best_g_loss = float('inf')
     patience_counter = 0
 
-    last_mape = float('inf')
+    best_mape = float('inf')
     mape_patience_counter = 0
     plot_epoch = False
     best_epoch = 0
@@ -217,11 +217,11 @@ def train_gan(epochs, batch_size, X, y, num_samples, n_critic, clip_value, gen_l
                 plot_epoch = True
                 mape_epoch_interval = low_mape_epoch_interval
 
-            if mape < last_mape:
-                # print(f"MAPE% improved: {last_mape - mape} and saved")
+            if mape < best_mape:
+                # print(f"MAPE% improved: {best_mape - mape} and saved")
                 gen_checkpoint_manager.save() # Save the model
                 critic_checkpoint_manager.save() # Save the model
-                last_mape = mape
+                best_mape = mape
                 best_epoch = epoch
                 mape_patience_counter = 0
                 if decay_factor_critic:
@@ -229,7 +229,6 @@ def train_gan(epochs, batch_size, X, y, num_samples, n_critic, clip_value, gen_l
                 if decay_factor_gen:
                     reset_lr(gen_optimizer, gen_lr)
             else:
-                last_mape = mape
                 mape_patience_counter += 1
                 critic_weight = 1 + (mape / 50)  # The critic gets stronger with higher MAPE
                 generator_weight = 1 / critic_weight  # The generator gets weaker with higher MAPE
@@ -244,10 +243,10 @@ def train_gan(epochs, batch_size, X, y, num_samples, n_critic, clip_value, gen_l
             # Early stopping: MAPE
             if mape_patience_counter >= mape_patience:
                 mape_patience_hitted = True
-                print(f'last_mape {last_mape} at epoch {best_epoch}')
+                print(f'best_mape {best_mape} at epoch {best_epoch}')
                 print("MAPE patience hit.")
                 # Exit the training loop
-                return (gan_model, generator, critic), (critic_losses, generator_losses), (best_g_loss, last_mape, best_epoch), (early_stop_triggered, mape_patience_hitted)
+                return (gan_model, generator, critic), (critic_losses, generator_losses), (best_g_loss, best_mape, best_epoch), (early_stop_triggered, mape_patience_hitted)
 
             # print(f'Epoch {epoch}, Discriminator Loss: {c_loss.numpy()}, Generator Loss: {g_loss.numpy()}')
 
@@ -266,9 +265,9 @@ def train_gan(epochs, batch_size, X, y, num_samples, n_critic, clip_value, gen_l
                 early_stop_triggered = True
                 print("Early stopping triggered.")
                 # Exit the training loop
-                return (gan_model, generator, critic), (critic_losses, generator_losses), (best_g_loss, last_mape, best_epoch), (early_stop_triggered, mape_patience_hitted)
+                return (gan_model, generator, critic), (critic_losses, generator_losses), (best_g_loss, best_mape, best_epoch), (early_stop_triggered, mape_patience_hitted)
 
-    return (gan_model, generator, critic), (critic_losses, generator_losses), (best_g_loss, last_mape, best_epoch), (early_stop_triggered, mape_patience_hitted)
+    return (gan_model, generator, critic), (critic_losses, generator_losses), (best_g_loss, best_mape, best_epoch), (early_stop_triggered, mape_patience_hitted)
 
 # Generate New Price Series with context
 def generate_new_series_with_context(last_data, generate_num, time_step, num_features, gan_model):
@@ -393,7 +392,7 @@ if __name__ == "__main__":
     patience = 30
     mape_patience = 15
     mape_epoch_interval = 10 # MAPE will be check on this inverval of epoch
-    mape_patience_threshold = 25 # While mape get lower than this value, mape break will be disabled
+    mape_patience_threshold = 20 # While mape get lower than this value, mape break will be disabled
     mape_plot_threshold = 15 # A flag to show preview plot will be set when mape passed down this value, then the preview will be shown on every next mape_epoch_interval. Setting this value to 0 will show preview on every mape_epoch_interval regardless of mape value.
     low_mape_epoch_interval = 10 # Reduce mape_epoch_interval to this value to check MAPE more often when the result get closer to actual
     num_epoch = 4000
@@ -404,7 +403,7 @@ if __name__ == "__main__":
 
     n_critic = 4 # Number of training steps for the critic per generator step
     clip_value = 0.01
-    lambda_gp = 9 # Gradient penalty weight
+    lambda_gp = 4 # Gradient penalty weight
     
     # Generator
     num_lstm = 0
@@ -414,7 +413,7 @@ if __name__ == "__main__":
     gen_base = 64
 
     # Critic
-    num_conv = 3
+    num_conv = 4
     base_conv = 64
 
     critic_dense = 1
@@ -422,7 +421,7 @@ if __name__ == "__main__":
 
     restore_checkpoint = False
     decay_factor_gen = 0
-    decay_factor_critic = 1.2
+    decay_factor_critic = 1.5
     
     # plot_train(features_train, target_train)
 
@@ -439,7 +438,7 @@ if __name__ == "__main__":
         return models, losses, bests, breaks
     
     # Train the GAN
-    (gan_model, generator, critic), (critic_losses, generator_losses), (best_g_loss, last_mape, best_epoch), (early_stop_triggered, mape_patience_hitted) = automate_train()
+    (gan_model, generator, critic), (critic_losses, generator_losses), (best_g_loss, best_mape, best_epoch), (early_stop_triggered, mape_patience_hitted) = automate_train()
     
     # Generate new price series
     last_sample = train_data[-1]
@@ -480,7 +479,7 @@ if __name__ == "__main__":
         print('predict_origin.shape', predict_origin.shape)
         print('test_origin.shape', test_origin.shape)
 
-        print(f'last_mape {last_mape} at epoch {best_epoch}')
+        print(f'best_mape {best_mape} at epoch {best_epoch}')
 
         # Call the evaluation function after generating new data
         evaluate_model(target_test, new_data)
