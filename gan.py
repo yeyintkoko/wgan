@@ -430,7 +430,7 @@ if __name__ == "__main__":
     gen_lr = 1e-5
     critic_lr = 1e-4
 
-    n_critic = 5 # Number of training steps for the critic per generator step
+    n_critic = 4 # Number of training steps for the critic per generator step
     clip_value = 0.01
     lambda_gp = 9 # Gradient penalty weight
     lambda_mse = 0 # 0.1 to 10
@@ -447,7 +447,7 @@ if __name__ == "__main__":
     base_conv = 64
 
     critic_dense = 1
-    critic_base = 64
+    critic_base = 32
 
     restore_checkpoint = False
     decay_factor_gen = 1.5
