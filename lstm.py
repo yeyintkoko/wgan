@@ -1,92 +1,155 @@
-import numpy as np
+from pandas_datareader import data as pdr
 import pandas as pd
 import matplotlib.pyplot as plt
-from tensorflow.keras.models import Sequential
-from tensorflow.keras.layers import LSTM, Dense, Input
-import datetime
+import seaborn as sns
+import tensorflow as tf
+from tensorflow import keras
+from tensorflow.keras import layers
 
-# Generate a sine wave
-def parser(x):
-    return datetime.datetime.strptime(x, '%Y-%m-%d')
-
-# Load dataset
-dataset = pd.read_csv('data/output.csv', header=0)
+# Load df
+df = pd.read_csv('data/output.csv', header=0)
+df = df[['price', 'ma7', '26ema', '12ema', 'upper_band', 'lower_band', 'ema', 'momentum']]
+df = df[::-1].reset_index(drop=True)
 
 # Define number of training days
-num_training_days = int(dataset.shape[0] * 0.7)
+num_training_days = int(df.shape[0] * 0.7)
 
-train_data, test_data = dataset[:num_training_days], dataset[num_training_days:]
+print(df.head())
 
-# Extract multiple features, assuming 'price' and 'MACD' are columns in the dataset
-data = dataset[['price', 'ma7', '26ema', '12ema', 'upper_band', 'lower_band', 'ema', 'momentum']].values  # Adjust based on your actual features
+def plot_data():
+    sns.set_style('darkgrid')
+    plt.figure(figsize=(14,5),dpi=120)
+    sns.lineplot(df, x=df.index, y=df[['price']].squeeze())
+    plt.show()
 
-def create_dataset(data, time_step=1):
-    X, y = [], []
-    for i in range(len(data) - time_step - 1):
-        a = data[i:(i + time_step)]
-        X.append(a)
-        y.append(data[i + time_step, 0])  # Predicting the price (first column)
-    return np.array(X), np.array(y)
+def normalize_cols(df,cols):
+    """Scale the values of each feature
+    according to the columns max value"""
+    data = df.loc[:,cols]
+    for col in cols:
+        scaler = lambda x: x / data[col].max()
+        data[col] = data[col].apply(scaler)
+    print(data[cols].head())
+    return data[cols].values
 
-time_step = 10  # Number of time steps to look back
-X, y = create_dataset(data, time_step)
+features = df.columns.values[:] # columns to train model on
+X = normalize_cols(df,features)
 
-# Reshape input to be [samples, time steps, features]
-X = X.reshape(X.shape[0], X.shape[1], X.shape[2])  # Shape: (samples, time_step, features)
-
-model = Sequential()
-# shape=(time_step, features)
-model.add(Input(shape=(time_step, data.shape[1])))  # Define the input shape using Input layer
-model.add(LSTM(50, return_sequences=True))
-model.add(LSTM(50))
-model.add(Dense(1))  # Output layer for price prediction
-
-model.compile(optimizer='adam', loss='mean_squared_error')
-
-# Fit the model
-model.fit(X, y, epochs=500, batch_size=32, verbose=0)
-
-# Starting point for the generation
-last_sequence = data[-time_step:].reshape(1, time_step, data.shape[1])  # Shape: (1, time_step, num_features)
-
-# Before the generation loop
-last_known_volume = data[-1, 1]  # Get the last known volume from the original data
-
-generated_data = []
-num_generate = len(test_data)  # Number of new data points to generate
-
-for _ in range(num_generate):
-    # Get the next predicted value
-    next_value = model.predict(last_sequence, verbose=0)  # Shape: (1, 1)
-    
-    print(f"Predicted next_value shape: {next_value.shape}, value: {next_value}")
-
-    # Extract the scalar value
-    next_value_scalar = next_value[0, 0]  # This should be a scalar
-    
-    # Append the predicted value to the generated data
-    generated_data.append(next_value_scalar)
-
-    # Prepare the next input sequence for the model
-    # Here, you need to create a new sequence by appending the new value.
-    next_value_reshaped = np.array([[next_value_scalar, last_sequence[0, -1, 1]]]).reshape(1, 1, data.shape[1])  # Replace the volume with the last known value or set a default
-
-    # Update last_sequence by appending the new value
-    last_sequence = np.append(last_sequence[:, 1:, :], next_value_reshaped, axis=1)
-    
-    print(f"Updated last_sequence shape: {last_sequence.shape}")
-
-# Create an array for generated data with the same number of features
-generated_data_full = np.array([[val, last_known_volume] for val in generated_data])
-# Combine original and generated data for visualization
-full_data = np.concatenate((data, generated_data_full), axis=0)
+"""
+### Turn each signal into a labeled dataset
+"""
+window_size = 30   # num. days per training sample
+batch_size = 128   # num. of samples per epoch
+buffer_size = 1000 # num of samples in memory for random selection
+split_time = num_training_days  # where to split the data for training/validation
 
 
-# Visualize the results
-plt.plot(np.arange(len(data)), data[:, 0], label='Original Price Data')  # Plot original price
-plt.plot(np.arange(len(data), len(full_data)), generated_data, label='Generated Price Data', color='red')
-plt.title("Generated Time Series Data")
-plt.xlabel("Time")
-plt.ylabel("Price")
-plt.legend()
-plt.show()
+def window_dataset(series, window_size, batch_size, shuffle_buffer):
+    """Funtion to turn time series data into set of sequences 
+    where the last value is the intended output of our model"""
+    ser = tf.expand_dims(series, axis=-1)
+    data = tf.data.Dataset.from_tensor_slices(series)
+    data = data.window(window_size + 1, shift=1, drop_remainder=True)
+    data = data.flat_map(lambda w: w.batch(window_size + 1))
+    data = data.shuffle(shuffle_buffer)
+    data = data.map(lambda w: (w[:-1], w[1:]))
+    return data.batch(batch_size).prefetch(1)
+
+
+x_train = X[:split_time,:]
+x_test = X[split_time:,:]
+
+print(f"Training data shape: {x_train.shape}")
+print(f"Validation data shape: {x_test.shape}")
+
+train_set = window_dataset(x_train,window_size,batch_size,buffer_size)
+
+keras.backend.clear_session()
+
+"""
+### Choose and connect the model components   
+"""
+# 1D convolution layers
+conv1 = layers.Conv1D(
+    filters=60,kernel_size=15,strides=1,
+    padding="causal",activation="relu")
+
+conv2 = layers.Conv1D(
+    filters=60,kernel_size=5,strides=1,
+    padding="causal",activation="tanh")
+
+# Bidirectional LSTM layers
+lstm1 = layers.Bidirectional(layers.LSTM(30,return_sequences=True))
+lstm2 = layers.Bidirectional(layers.LSTM(20,return_sequences=True))
+
+# Model construction
+inputs = layers.Input(shape=(None,len(features)))
+x = conv1(inputs)
+x = lstm1(x)
+x = lstm2(x)
+x = conv2(x)
+x = layers.Dense(60,activation='relu')(x)
+x = layers.Dropout(.1)(x)
+x = layers.Dense(1,activation='tanh')(x)
+outputs = layers.Lambda(lambda x: 25*abs(x))(x)
+
+# SGD optimizer and Huber loss
+optimizer = keras.optimizers.SGD(learning_rate=1e-5, momentum=0.9)
+loss = keras.losses.Huber()
+
+model = keras.Model(inputs=inputs,outputs=outputs)
+model.compile(optimizer,loss,
+              metrics=["mae"])
+model.summary()
+
+"""
+### Train model
+"""
+epochs = 300
+
+history = model.fit(train_set, epochs=epochs, verbose=0)
+print(f"Model trained for {epochs} epochs")
+
+
+"""
+### Inspect training results
+"""
+def model_forecast(model, X, window_size):
+    """Takes in numpy array, creates a windowed tensor 
+    and predicts the following value on each window"""
+    data = tf.data.Dataset.from_tensor_slices(X)
+    data = data.window(window_size, shift=1, drop_remainder=True)
+    data = data.flat_map(lambda w: w.batch(window_size))
+    data = data.batch(32).prefetch(1)
+    forecast = model.predict(data)
+    return forecast
+
+train_window = [i for i in range(split_time-window_size)]
+train_window_df = pd.DataFrame(train_window, columns=['Date'])
+
+forecast = model_forecast(model,x_train,window_size)
+
+# Plot the forecast vs actual data
+def plot_prediction():
+    plt.figure(figsize=(14, 5), dpi=120)
+    sns.lineplot(data=train_window_df, x='Date', y=forecast[:-1, 1, 0], label='Forecast')
+    sns.lineplot(data=train_window_df, x='Date', y=X[:split_time - window_size, 1], label='Actual')
+    plt.legend()
+    plt.show()
+plot_prediction()
+
+"""
+### Make predictions on unseen data
+"""
+val_window = [i for i in range(split_time,len(df)-window_size)]
+val_window_df = pd.DataFrame(val_window, columns=['Date'])
+
+forecast = model_forecast(model,x_test,window_size)
+
+def plot_forecast():
+    plt.figure(figsize=(8,5),dpi=120)
+    sns.lineplot(data=val_window_df, x='Date', y=forecast[:-1,1,0], label='Forecast')
+    sns.lineplot(data=val_window_df, x='Date', y=X[split_time:-window_size,1], label='Actual')
+    plt.legend()
+    plt.show()
+plot_forecast()

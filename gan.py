@@ -115,6 +115,8 @@ def reset_lr(optimizer, lr):
 def adjust_lr(optimizer, decay_factor):
     current_lr = optimizer.learning_rate.numpy()
     new_lr = current_lr * decay_factor
+    if new_lr > 5e-1:
+        return
     optimizer.learning_rate.assign(new_lr)
 
     formatted_current_lr = "{:.0e}".format(current_lr).replace("-0", "-")
@@ -123,7 +125,7 @@ def adjust_lr(optimizer, decay_factor):
         
 
 # Train the GAN
-def train_gan(epochs, batch_size, X, y, num_samples, n_critic, clip_value, gen_lr, critic_lr, num_lstm, gen_dense, base_lstm, gen_base, num_conv, critic_dense, base_conv, critic_base, time_step, num_features, patience, mape_patience, mape_epoch_interval, mape_patience_threshold, mape_plot_threshold, low_mape_epoch_interval, lambda_gp, restore_checkpoint, decay_factor_critic, decay_factor_gen):
+def train_gan(epochs, batch_size, X, y, num_samples, n_critic, clip_value, gen_lr, critic_lr, num_lstm, gen_dense, base_lstm, gen_base, num_conv, critic_dense, base_conv, critic_base, time_step, num_features, patience, mape_patience, mape_epoch_interval, mape_patience_threshold, mape_plot_threshold, low_mape_epoch_interval, lambda_gp, lambda_mse, restore_checkpoint, decay_factor_critic, decay_factor_gen):
     generator = build_generator(num_lstm, base_lstm, gen_dense, gen_base, time_step, num_features)
     gen_optimizer = Adam(learning_rate=gen_lr)
     gen_checkpoint = tf.train.Checkpoint(model=generator, optimizer=gen_optimizer)
@@ -152,13 +154,16 @@ def train_gan(epochs, batch_size, X, y, num_samples, n_critic, clip_value, gen_l
     patience_counter = 0
 
     best_mape = float('inf')
+    last_mape = float('-inf')
     mape_patience_counter = 0
     plot_epoch = False
     best_epoch = 0
+    regression_loss = 0
     early_stop_triggered = False
     mape_patience_hitted = False
     generator_weight = 1
     critic_weight = 1
+    n_critic_origin = n_critic
 
     for epoch in range(epochs):
         for _ in range(n_critic):
@@ -169,8 +174,8 @@ def train_gan(epochs, batch_size, X, y, num_samples, n_critic, clip_value, gen_l
             real_data = y[idx].reshape(-1, 1, 1)
 
             # Generate synthetic data
-            noise = tf.random.normal(shape=(batch_size, time_step, num_features))
-            fake_data = generator(noise)
+            # noise = tf.random.normal(shape=(batch_size, time_step, num_features))
+            fake_data = generator(train_data)
 
             with tf.GradientTape() as tape:
                 real_loss = tf.reduce_mean(critic(real_data))
@@ -194,7 +199,7 @@ def train_gan(epochs, batch_size, X, y, num_samples, n_critic, clip_value, gen_l
 
         # Train Generator
         with tf.GradientTape() as tape:
-            g_loss = -tf.reduce_mean(gan_model(train_data))
+            g_loss = -tf.reduce_mean(gan_model(train_data)) + regression_loss
             weighted_g_loss = g_loss * generator_weight
             
         grads = tape.gradient(weighted_g_loss, generator.trainable_variables)
@@ -207,6 +212,7 @@ def train_gan(epochs, batch_size, X, y, num_samples, n_critic, clip_value, gen_l
             features_test_data = get_features_test_data(encoded_features_test, X[-1])
             new_data = generator.predict(features_test_data, verbose=0).flatten()
             mape = evaluate_model(target_test, new_data)
+            regression_loss = lambda_mse * tf.reduce_mean(tf.square(tf.cast(fake_data, tf.float32) - tf.cast(real_data, tf.float32)))
 
             if mape < mape_patience_threshold:
                 mape_patience_counter = 0
@@ -222,6 +228,8 @@ def train_gan(epochs, batch_size, X, y, num_samples, n_critic, clip_value, gen_l
                 gen_checkpoint_manager.save() # Save the model
                 critic_checkpoint_manager.save() # Save the model
                 best_mape = mape
+                last_mape = mape
+                n_critic = n_critic_origin
                 best_epoch = epoch
                 mape_patience_counter = 0
                 if decay_factor_critic:
@@ -232,13 +240,30 @@ def train_gan(epochs, batch_size, X, y, num_samples, n_critic, clip_value, gen_l
                 mape_patience_counter += 1
                 critic_weight = 1 + (mape / 50)  # The critic gets stronger with higher MAPE
                 generator_weight = 1 / critic_weight  # The generator gets weaker with higher MAPE
-                if decay_factor_critic:
+                if mape < last_mape:
+                    mape_patience_counter = 0
+                if mape > last_mape and n_critic < 10:
+                    n_critic = n_critic + 1
+                    print(f'n_critic increased to {n_critic}')
+                elif mape < last_mape and n_critic > n_critic_origin:
+                    n_critic = n_critic - 1
+                    print(f'n_critic decreased to {n_critic}')
+
+                if decay_factor_critic and mape > last_mape:
+                    last_mape = mape
                     adjust_lr(critic_optimizer, decay_factor_critic)
-                if decay_factor_gen:
+                elif decay_factor_critic > critic_lr and mape < last_mape:
+                    adjust_lr(critic_optimizer, 0.8)
+
+                if decay_factor_gen and mape > last_mape:
+                    last_mape = mape
                     adjust_lr(gen_optimizer, decay_factor_gen)
+                elif decay_factor_gen > gen_lr and mape < last_mape:
+                    adjust_lr(gen_optimizer, 0.8)
             
             if plot_epoch:
-                plot_result(new_data, target_test, epoch)
+                predict_origin, test_origin = revert_to_actual_price(new_data, target_test)
+                plot_result(predict_origin, test_origin, epoch)
                 
             # Early stopping: MAPE
             if mape_patience_counter >= mape_patience:
@@ -254,8 +279,6 @@ def train_gan(epochs, batch_size, X, y, num_samples, n_critic, clip_value, gen_l
             if g_loss < best_g_loss:
                 best_g_loss = g_loss
                 patience_counter = 0
-                if decay_factor_gen:
-                    reset_lr(gen_optimizer, gen_lr)
                 print("Model improved.")
             else:
                 patience_counter += 1
@@ -305,6 +328,12 @@ def get_features_test_data(features_test, last_sample):
         features_test_data.append(last_sample)
     features_test_data = np.array(features_test_data)
     return features_test_data
+
+def revert_to_actual_price(new_data, target_test):
+    # Inverse transform to get the actual predicted price
+    predict_origin = scaler_y.inverse_transform(new_data.reshape(-1, 1)).flatten()
+    test_origin = scaler_y.inverse_transform(target_test.reshape(-1, 1)).flatten()
+    return predict_origin, test_origin
 
 # Evaluate the model using multiple metrics
 def evaluate_model(true_values, predicted_values):
@@ -389,8 +418,8 @@ y = train_target
 # This block will only execute when this file is run directly
 if __name__ == "__main__":
 
-    patience = 30
-    mape_patience = 15
+    patience = 15
+    mape_patience = 5
     mape_epoch_interval = 10 # MAPE will be check on this inverval of epoch
     mape_patience_threshold = 20 # While mape get lower than this value, mape break will be disabled
     mape_plot_threshold = 15 # A flag to show preview plot will be set when mape passed down this value, then the preview will be shown on every next mape_epoch_interval. Setting this value to 0 will show preview on every mape_epoch_interval regardless of mape value.
@@ -403,7 +432,8 @@ if __name__ == "__main__":
 
     n_critic = 4 # Number of training steps for the critic per generator step
     clip_value = 0.01
-    lambda_gp = 4 # Gradient penalty weight
+    lambda_gp = 5 # Gradient penalty weight
+    lambda_mse = 2.25 # 0.1 to 10
     
     # Generator
     num_lstm = 0
@@ -416,18 +446,18 @@ if __name__ == "__main__":
     num_conv = 4
     base_conv = 64
 
-    critic_dense = 1
+    critic_dense = 3
     critic_base = 64
 
     restore_checkpoint = False
-    decay_factor_gen = 0
-    decay_factor_critic = 1.5
+    decay_factor_gen = 1.5
+    decay_factor_critic = 0
     
     # plot_train(features_train, target_train)
 
     def automate_train():
         global restore_checkpoint
-        models, losses, bests, breaks = train_gan(num_epoch, batch_size, X, y, num_samples, n_critic, clip_value, gen_lr, critic_lr, num_lstm, gen_dense, base_lstm, gen_base, num_conv, critic_dense, base_conv, critic_base, time_step, num_features, patience, mape_patience, mape_epoch_interval, mape_patience_threshold, mape_plot_threshold, low_mape_epoch_interval, lambda_gp, restore_checkpoint, decay_factor_critic=decay_factor_critic, decay_factor_gen=decay_factor_gen)
+        models, losses, bests, breaks = train_gan(num_epoch, batch_size, X, y, num_samples, n_critic, clip_value, gen_lr, critic_lr, num_lstm, gen_dense, base_lstm, gen_base, num_conv, critic_dense, base_conv, critic_base, time_step, num_features, patience, mape_patience, mape_epoch_interval, mape_patience_threshold, mape_plot_threshold, low_mape_epoch_interval, lambda_gp, lambda_mse, restore_checkpoint, decay_factor_critic=decay_factor_critic, decay_factor_gen=decay_factor_gen)
         (early_stop_triggered, mape_patience_hitted) = breaks
         if early_stop_triggered:
             print('💥💣🧨🔥 early_stop_triggered 🔥🧨💣💥')
@@ -451,9 +481,7 @@ if __name__ == "__main__":
     features_test_data = get_features_test_data(features_test, train_data[-1])
     new_data = generator.predict(features_test_data).flatten()
 
-    # Inverse transform to get the actual predicted price
-    predict_origin = scaler_y.inverse_transform(new_data.reshape(-1, 1)).flatten()
-    test_origin = scaler_y.inverse_transform(target_test.reshape(-1, 1)).flatten()
+    predict_origin, test_origin = revert_to_actual_price(new_data, target_test)
 
     def visualize_result():
         generator.summary()
@@ -487,6 +515,6 @@ if __name__ == "__main__":
         # plot_train(features_train, target_train)
         # plot_test(features_test, target_test)
         # plot_loss(critic_losses, generator_losses)
-        plot_result(new_data, target_test)
+        plot_result(predict_origin, test_origin)
 
     visualize_result()
