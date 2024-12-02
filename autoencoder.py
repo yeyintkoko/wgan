@@ -15,8 +15,8 @@ def load_data():
     dataset = dataset[::-1].reset_index(drop=True)
 
     # Reduce the data to 50% for faster turning
-    num_reduce_days = int(dataset.shape[0]*.5)
-    dataset = dataset.iloc[num_reduce_days:]
+    # num_reduce_days = int(dataset.shape[0]*.5)
+    # dataset = dataset.iloc[num_reduce_days:]
 
     # Check for NaNs in the original dataset
     if dataset.isnull().values.any():
@@ -25,7 +25,7 @@ def load_data():
     # Set print options for NumPy
     np.set_printoptions(suppress=True, precision=6)
 
-    num_training_days = int(dataset.shape[0]*.7)
+    num_training_days = int(dataset.shape[0]*.9)
 
     data_train = dataset.iloc[:num_training_days].values
     data_test = dataset.iloc[num_training_days:].values
