@@ -10,7 +10,8 @@ from keras.optimizers import Adam
 def load_data():
     # Load the dataset
     dataset = pd.read_csv("data/output.csv", header=0).dropna()
-    dataset = dataset[['price', 'ma7', '26ema', '12ema', 'upper_band', 'lower_band', 'ema', 'momentum']]
+    selected_columns = ['price', 'ma7', '26ema', '12ema', 'upper_band', 'lower_band', 'ema', 'momentum']
+    dataset = dataset[selected_columns]
     dataset = dataset[::-1].reset_index(drop=True)
 
     # Reduce the data to 50% for faster turning
@@ -47,7 +48,7 @@ def load_data():
     y_train = scaler_y.fit_transform(y_train_reshaped).flatten()
     y_test = scaler_y.transform(y_test_reshaped).flatten()  # Use transform, not fit_transform
 
-    return (X_train, y_train), (X_test, y_test), (scaler_X, scaler_y), num_training_days
+    return (X_train, y_train), (X_test, y_test), (scaler_X, scaler_y), num_training_days, selected_columns
 
 def build_stacked_autoencoder(input_shape):
     input_layer = layers.Input(shape=input_shape)
@@ -63,7 +64,7 @@ def build_stacked_autoencoder(input_shape):
     autoencoder.compile(optimizer=Adam(learning_rate=0.0001), loss='mse')
     return autoencoder, encoder
 
-(X_train, y_train), (X_test, y_test), (scaler_X, scaler_y), num_training_days = load_data()
+(X_train, y_train), (X_test, y_test), (scaler_X, scaler_y), num_training_days, selected_columns = load_data()
 
 # Define the autoencoder architecture
 num_features = X_train.shape[1]

@@ -8,7 +8,7 @@ from keras.layers import LSTM, Dense, Input, Reshape, Conv1D, Flatten, MaxPoolin
 from keras.optimizers import Adam
 from sklearn.metrics import mean_squared_error, mean_absolute_error, r2_score
 from sklearn.preprocessing import StandardScaler
-from autoencoder import encoded_features_test, encoded_features_train, y_train, y_test, scaler_y, scaler_X, num_training_days, get_divisors
+from autoencoder import encoded_features_test, encoded_features_train, y_train, y_test, scaler_y, scaler_X, num_training_days, selected_columns, get_divisors
 
 # np.set_printoptions(suppress=True, precision=6)
 
@@ -209,8 +209,15 @@ def train_gan(epochs, batch_size, X, y, num_samples, n_critic, clip_value, gen_l
         generator_losses.append(weighted_g_loss.numpy())
 
         if epoch % mape_epoch_interval == 0:
-            features_test_data = get_features_test_data(encoded_features_test, X[-1])
-            new_data = generator.predict(features_test_data, verbose=0).flatten()
+            # features_test_data = get_features_test_data(encoded_features_test, X[-1])
+            # new_data = generator.predict(features_test_data, verbose=0).flatten()
+            
+            last_sample = train_data[-1]
+            last_sample = last_sample[1:]
+            last_history = np.concatenate((last_sample, [encoded_features_test[0, :]]), axis=0)
+            generate_num = len(target_test)
+            new_data = generate_new_series_with_context(last_data=last_history, generate_num=generate_num, time_step=time_step, num_features=num_features, generator=generator)
+
             mape = evaluate_model(target_test, new_data)
             regression_loss = lambda_mse * tf.reduce_mean(tf.square(tf.cast(fake_data, tf.float32) - tf.cast(real_data, tf.float32)))
 
@@ -292,31 +299,52 @@ def train_gan(epochs, batch_size, X, y, num_samples, n_critic, clip_value, gen_l
 
     return (gan_model, generator, critic), (critic_losses, generator_losses), (best_g_loss, best_mape, best_epoch), (early_stop_triggered, mape_patience_hitted)
 
+def get_new_features(last_sample, predicted_price):
+    data = last_sample.reshape(time_step, num_features)
+    prices = data[:,0]
+    prices = np.append(prices, predicted_price)
+    df = pd.DataFrame(prices, columns=['price'])
+
+    # Calculate technical indicators
+    df['ma7'] = df['price'].rolling(window=7).mean()
+    df['ma21'] = df['price'].rolling(window=21).mean()
+    df['26ema'] = df['price'].ewm(span=26).mean()
+    df['12ema'] = df['price'].ewm(span=12).mean()
+    df['MACD'] = (df['12ema'] - df['26ema'])
+    df['20sd'] = df['price'].rolling(window=20).std()
+    df['upper_band'] = df['ma21'] + (df['20sd'] * 2)
+    df['lower_band'] = df['ma21'] - (df['20sd'] * 2)
+    df['ema'] = df['price'].ewm(com=0.5).mean()
+    df['momentum'] = df['price'] - df['price'].shift(1)
+    # df['log_momentum'] = np.where(df['price'].shift(1) > 0, np.log(df['price'] / df['price'].shift(1)), np.nan)
+
+    df = df[selected_columns]
+
+    return df.iloc[-1].values
+
 # Generate New Price Series with context
-def generate_new_series_with_context(last_data, generate_num, time_step, num_features, gan_model):
+def generate_new_series_with_context(last_data, generate_num, time_step, num_features, generator):
     generated_series = []
 
     for _ in range(generate_num):
-        context = last_data.reshape(1, time_step, num_features)
-        prediction = gan_model.predict(context)
-        predicted_value = prediction[0]
+        last_sample = last_data.reshape(1, time_step, num_features)
+        predicted_value = generator.predict(last_sample, verbose=0).flatten()
 
         # Extract the new price
-        predicted_price = predicted_value.reshape(1)[0]
+        predicted_price = predicted_value[0]
 
         # Prepare features for the new history
-        new_features = prediction[1]
+        new_features = get_new_features(last_sample, predicted_price)
 
         # noise = np.random.uniform(10, 300, num_features)
         # new_features = scaler_X.transform(noise.reshape(1, -1)).flatten()
-
-        new_features[0] = predicted_price  # Set the predicted price
+        # new_features[0] = predicted_price  # Set the predicted price
 
         generated_series.append(predicted_price)
 
         # Update last_data with the new generated price and dynamic features
         last_data = last_data[1:]
-        last_data = np.concatenate((last_data, new_features), axis=0)
+        last_data = np.concatenate((last_data, [new_features]), axis=0)
 
     return np.array(generated_series)
 
@@ -476,10 +504,10 @@ if __name__ == "__main__":
     last_history = np.concatenate((last_sample, [features_test[0, :]]), axis=0)
 
     generate_num = len(target_test)
-    # new_data = generate_new_series_with_context(last_data=last_history, generate_num=generate_num, time_step=time_step, num_features=num_features, gan_model=gan_model)
+    new_data = generate_new_series_with_context(last_data=last_history, generate_num=generate_num, time_step=time_step, num_features=num_features, generator=generator)
 
-    features_test_data = get_features_test_data(features_test, train_data[-1])
-    new_data = generator.predict(features_test_data).flatten()
+    # features_test_data = get_features_test_data(features_test, train_data[-1])
+    # new_data = generator.predict(features_test_data).flatten()
 
     predict_origin, test_origin = revert_to_actual_price(new_data, target_test)
 
