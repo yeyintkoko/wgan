@@ -125,7 +125,7 @@ def adjust_lr(optimizer, decay_factor):
         
 
 # Train the GAN
-def train_gan(epochs, batch_size, X, y, num_samples, n_critic, clip_value, gen_lr, critic_lr, num_lstm, gen_dense, base_lstm, gen_base, num_conv, critic_dense, base_conv, critic_base, time_step, num_features, patience, mape_patience, mape_epoch_interval, mape_patience_threshold, mape_plot_threshold, low_mape_epoch_interval, lambda_gp, restore_checkpoint, decay_factor_critic, decay_factor_gen):
+def train_gan(epochs, batch_size, X, y, num_samples, n_critic, clip_value, gen_lr, critic_lr, num_lstm, gen_dense, base_lstm, gen_base, num_conv, critic_dense, base_conv, critic_base, time_step, num_features, patience, mape_patience, patience_interval, mape_threshold, plot_threshold, low_patience_interval, lambda_gp, restore_checkpoint, decay_factor_critic, decay_factor_gen):
     generator = build_generator(num_lstm, base_lstm, gen_dense, gen_base, time_step, num_features)
     gen_optimizer = Adam(learning_rate=gen_lr)
     gen_checkpoint = tf.train.Checkpoint(model=generator, optimizer=gen_optimizer)
@@ -154,7 +154,7 @@ def train_gan(epochs, batch_size, X, y, num_samples, n_critic, clip_value, gen_l
     patience_counter = 0
 
     best_mape = float('inf')
-    mape_patience_counter = 0
+    mape_counter = 0
     plot_epoch = False
     best_epoch = 0
     early_stop_triggered = False
@@ -200,13 +200,13 @@ def train_gan(epochs, batch_size, X, y, num_samples, n_critic, clip_value, gen_l
         critic_losses.append(c_loss.numpy())
         generator_losses.append(g_loss.numpy())
 
-        if decay_factor_critic:
-            adjust_lr(critic_optimizer, decay_factor_critic)
+        if epoch % patience_interval == 0:
+            if decay_factor_critic:
+                adjust_lr(critic_optimizer, decay_factor_critic)
 
-        if decay_factor_gen:
-            adjust_lr(gen_optimizer, decay_factor_gen)
+            if decay_factor_gen:
+                adjust_lr(gen_optimizer, decay_factor_gen)
 
-        if epoch % mape_epoch_interval == 0:
             features_test_data = get_features_test_data(encoded_features_test, X[-1])
             new_data = generator.predict(features_test_data, verbose=0).flatten()
             
@@ -216,16 +216,16 @@ def train_gan(epochs, batch_size, X, y, num_samples, n_critic, clip_value, gen_l
             # generate_num = len(target_test)
             # new_data = generate_new_series_with_context(last_data=last_history, generate_num=generate_num, time_step=time_step, num_features=num_features, generator=generator)
 
-            mape = evaluate_model(target_test, new_data)
+            mape = evaluate_model(target_test, new_data, epoch)
 
-            if mape < mape_patience_threshold:
-                mape_patience_counter = 0
+            if mape < mape_threshold:
+                mape_counter = 0
             else:
                 plot_epoch = False
             
-            if not mape_plot_threshold or mape < mape_plot_threshold:
+            if not plot_threshold or mape < plot_threshold:
                 plot_epoch = True
-                mape_epoch_interval = low_mape_epoch_interval
+                patience_interval = low_patience_interval
 
             if mape < best_mape:
                 # print(f"MAPE% improved: {best_mape - mape} and saved")
@@ -233,16 +233,16 @@ def train_gan(epochs, batch_size, X, y, num_samples, n_critic, clip_value, gen_l
                 critic_checkpoint_manager.save() # Save the model
                 best_mape = mape
                 best_epoch = epoch
-                mape_patience_counter = 0
+                mape_counter = 0
             else:
-                mape_patience_counter += 1
+                mape_counter += 1
             
             if plot_epoch:
                 predict_origin, test_origin = revert_to_actual_price(new_data, target_test)
                 plot_result(predict_origin, test_origin, epoch)
                 
             # Early stopping: MAPE
-            if mape_patience_counter >= mape_patience:
+            if mape_counter >= mape_patience:
                 mape_patience_hitted = True
                 print(f'best_mape {best_mape} at epoch {best_epoch}')
                 print("MAPE patience hit.")
@@ -333,7 +333,7 @@ def revert_to_actual_price(new_data, target_test):
     return predict_origin, test_origin
 
 # Evaluate the model using multiple metrics
-def evaluate_model(true_values, predicted_values):
+def evaluate_model(true_values, predicted_values, epoch=None):
     mse = mean_squared_error(true_values, predicted_values)
     mae = mean_absolute_error(true_values, predicted_values)
     r2 = r2_score(true_values, predicted_values)
@@ -343,7 +343,7 @@ def evaluate_model(true_values, predicted_values):
     # print(f"Mean Squared Error (MSE): {mse}")
     # print(f"Mean Absolute Error (MAE): {mae}")
     # print(f"R-squared (R²): {r2}")
-    print(f"Mean Absolute Percentage Error (MAPE): {mape:.2f}%")
+    print(f"{f'Epoch {epoch}: ' if epoch else ''}Mean Absolute Percentage Error (MAPE): {mape:.2f}%")
     return mape
 
 def plot_loss(critic_losses, generator_losses):
@@ -417,11 +417,11 @@ if __name__ == "__main__":
 
     patience = 15
     mape_patience = 5
-    mape_epoch_interval = 10 # MAPE will be check on this inverval of epoch
-    mape_patience_threshold = 20 # While mape get lower than this value, mape break will be disabled
-    mape_plot_threshold = 0 # A flag to show preview plot will be set when mape passed down this value, then the preview will be shown on every next mape_epoch_interval. Setting this value to 0 will show preview on every mape_epoch_interval regardless of mape value.
-    low_mape_epoch_interval = 10 # Reduce mape_epoch_interval to this value to check MAPE more often when the result get closer to actual
-    num_epoch = 4000
+    patience_interval = 10 # MAPE will be check on this inverval of epoch
+    mape_threshold = 20 # While mape get lower than this value, mape break will be disabled and patience_interval will be replaced with low_patience_interval
+    plot_threshold = 0 # A flag to show preview plot will be set when mape passed down this value, then the preview will be shown on every next patience_interval. Setting this value to 0 will show preview on every patience_interval regardless of mape value.
+    low_patience_interval = 10 # Reduce patience_interval to this value to check MAPE more often when the result get closer to actual
+    num_epoch = 600
 
     # Learning rates
     gen_lr = 1e-5
@@ -453,7 +453,7 @@ if __name__ == "__main__":
 
     def automate_train():
         global restore_checkpoint
-        models, losses, bests, breaks = train_gan(num_epoch, batch_size, X, y, num_samples, n_critic, clip_value, gen_lr, critic_lr, num_lstm, gen_dense, base_lstm, gen_base, num_conv, critic_dense, base_conv, critic_base, time_step, num_features, patience, mape_patience, mape_epoch_interval, mape_patience_threshold, mape_plot_threshold, low_mape_epoch_interval, lambda_gp, restore_checkpoint, decay_factor_critic, decay_factor_gen)
+        models, losses, bests, breaks = train_gan(num_epoch, batch_size, X, y, num_samples, n_critic, clip_value, gen_lr, critic_lr, num_lstm, gen_dense, base_lstm, gen_base, num_conv, critic_dense, base_conv, critic_base, time_step, num_features, patience, mape_patience, patience_interval, mape_threshold, plot_threshold, low_patience_interval, lambda_gp, restore_checkpoint, decay_factor_critic, decay_factor_gen)
         (early_stop_triggered, mape_patience_hitted) = breaks
         if early_stop_triggered:
             print('💥💣🧨🔥 early_stop_triggered 🔥🧨💣💥')
