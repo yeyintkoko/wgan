@@ -12,7 +12,7 @@ df = df[['price', 'ma7', '26ema', '12ema', 'upper_band', 'lower_band', 'ema', 'm
 df = df[::-1].reset_index(drop=True)
 
 # Define number of training days
-num_training_days = int(df.shape[0] * 0.7)
+num_training_days = int(df.shape[0] * 0.9)
 
 print(df.head())
 
@@ -105,7 +105,7 @@ model.summary()
 """
 ### Train model
 """
-epochs = 300
+epochs = 1500
 
 history = model.fit(train_set, epochs=epochs, verbose=0)
 print(f"Model trained for {epochs} epochs")
@@ -132,8 +132,8 @@ forecast = model_forecast(model,x_train,window_size)
 # Plot the forecast vs actual data
 def plot_prediction():
     plt.figure(figsize=(14, 5), dpi=120)
-    sns.lineplot(data=train_window_df, x='Date', y=forecast[:-1, 1, 0], label='Forecast')
-    sns.lineplot(data=train_window_df, x='Date', y=X[:split_time - window_size, 1], label='Actual')
+    sns.lineplot(data=train_window_df, x='Date', y=forecast[:-1, -1, 0], label='Forecast')
+    sns.lineplot(data=train_window_df, x='Date', y=X[:split_time - window_size, 0], label='Actual')
     plt.legend()
     plt.show()
 plot_prediction()
@@ -148,8 +148,8 @@ forecast = model_forecast(model,x_test,window_size)
 
 def plot_forecast():
     plt.figure(figsize=(8,5),dpi=120)
-    sns.lineplot(data=val_window_df, x='Date', y=forecast[:-1,1,0], label='Forecast')
-    sns.lineplot(data=val_window_df, x='Date', y=X[split_time:-window_size,1], label='Actual')
+    sns.lineplot(data=val_window_df, x='Date', y=forecast[:-1, -1, 0], label='Forecast')
+    sns.lineplot(data=val_window_df, x='Date', y=X[split_time:-window_size, 0], label='Actual')
     plt.legend()
     plt.show()
 plot_forecast()

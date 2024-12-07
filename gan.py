@@ -446,13 +446,13 @@ y = train_target
 # This block will only execute when this file is run directly
 if __name__ == "__main__":
 
-    patience = 15
-    mape_patience = 3
+    patience = 1500
+    mape_patience = 300
     patience_interval = 20 # MAPE will be check on this inverval of epoch
     mape_threshold = 20 # While mape get lower than this value, mape break will be disabled and patience_interval will be replaced with low_patience_interval
     plot_threshold = 15 # A flag to show preview plot will be set when mape passed down this value, then the preview will be shown on every next patience_interval. Setting this value to 0 will show preview on every patience_interval regardless of mape value.
     low_patience_interval = 10 # Reduce patience_interval to this value to check MAPE more often when the result get closer to actual
-    num_epoch = 2500
+    num_epoch = 600
 
     # Learning rates
     gen_lr = 1e-5
@@ -461,7 +461,7 @@ if __name__ == "__main__":
     n_critic = 4 # Number of training steps for the critic per generator step
     clip_value = 0.01
     lambda_gp = 9 # Gradient penalty weight
-    lambda_mse = 10 # 0.1 to 10
+    lambda_mse = 25 # 0.1 to 10
     n_critic_increasement = 1
     
     # Generator
