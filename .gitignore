@@ -4,3 +4,10 @@ macports_user_dir
 __*
 .DS_Store
 checkpoints
+
+generator_model.keras
+best_gan_model.keras
+gan_model.keras
+
+imageai/retinanet.pth
+imageai/yolov3.pt
