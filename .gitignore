@@ -3,3 +3,6 @@ venv
 macports_user_dir
 __*
 .DS_Store
+*.pth
+*.keras
+imageai/yolov3.pt
