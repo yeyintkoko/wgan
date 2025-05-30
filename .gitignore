@@ -4,3 +4,6 @@ macports_user_dir
 __*
 .DS_Store
 checkpoints
+*.pth
+*.keras
+imageai/yolov3.pt
