@@ -46,7 +46,7 @@ def prepare_data(num_samples, time_step, features_train, target_train):
     train_target = np.array(train_target)
     return train_data, train_target
 
-# Define the CNN Generator
+# Define the RNN Generator
 def build_generator(num_lstm, base_lstm, num_dense, base_dense, time_step, num_features):
     input = Input(shape=(time_step, num_features))
     layer = input
