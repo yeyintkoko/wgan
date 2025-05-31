@@ -6,5 +6,5 @@ __*
 checkpoints
 
 *.keras
-discriminator.pth
+*.pth
 imageai/yolov3.pt
