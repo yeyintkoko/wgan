@@ -48,7 +48,7 @@ def forFrame(frame_number, output_array, output_count, returned_frame):
 
 video_detector = VideoObjectDetection()
 video_detector.setModelTypeAsYOLOv3()
-video_detector.setModelPath("yolov3.pt")
+video_detector.setModelPath("tiny-yolov3.pt")
 video_detector.loadModel()
 
 plt.show()
